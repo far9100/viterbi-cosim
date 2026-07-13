@@ -1,0 +1,20 @@
+# Python 執行環境（WSL2 Ubuntu 24.04 / Python 3.12）。
+#
+# 一律用 == 釘死版本，不用 >=。理由沿用既有通訊模擬器的慣例：本專案的驗證方式之一是
+# 「刪掉 CSV 重跑，與入庫的 CSV 逐位元組比對」。這件事只有在環境固定時才有意義——
+# numpy 版本一變，浮點歸約順序就可能改變最後幾個 bit，重跑結果不再逐位元組相同。
+#
+# numpy 版本刻意與 communications relay simulator 對齊（該專案也釘 2.4.4），
+# 因為 golden/ref_float.py 會 import 它的 commsim.channel / commsim.metrics。
+
+numpy==2.4.4
+matplotlib==3.10.9
+pytest==9.0.3
+
+# cocotb 釘 1.9.x：Tier A 的 per-stage 比對只需要穩定的 handle/value API。
+# cocotb 2.x 改了 handle 語意（LogicArray、.value）且其 Verilator backend 是最不成熟的一塊，
+# 對本專案沒有任何好處，只有相容性風險。
+cocotb==1.9.2
+
+# torch 不列在此檔：它必須從 cu128 index 安裝（PyPI 的預設 wheel 是 CPU-only，
+# 在 sm_120 上會出現 "no kernel image available"）。見 scripts/setup_gpu.sh。

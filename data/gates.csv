@@ -1,0 +1,4 @@
+gate,passed,measured,expected,tolerance,detail,milestone
+E1 Verilator + Icarus,True,Verilator 5.051 devel rev v5.050-59-gdde8de0a0 (mod) / Icarus Verilog version 14.0 (devel) (s20260301-286-g15689210c-dirty),兩者皆在,,需要兩個模擬器：Verilator 是 2-state（未初始化的暫存器讀為 0），會隱藏 reset 不完整的 bug；Icarus 是 4-state（讀為 X）。G7 靠它交叉檢查。,M0
+E2 GPU 整數 ACS 位元級相等,True,"sm_120, 平手樣本 123","sm_120, 與 numpy array_equal",,平手樣本數必須 > 0，否則 tie-break 語意根本沒被測到。torch.minimum 不回傳索引，<= 與 < 的選擇會默默決定平手方向——這是 C2' 最可能的失效點。,M0
+E3 SAIF annotation coverage,True,100.00%,>= 99%,,Yosys -> Icarus gate-level -> VCD -> SAIF -> OpenSTA 全線打通。覆蓋率不足時 OpenSTA 不會報錯，只會靜靜地套用預設 toggle-rate 猜測——而規格書 §7 明令禁止那件事。,M0

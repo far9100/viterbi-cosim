@@ -1,0 +1,28 @@
+# syn.ys —— counter 煙霧測試的 Yosys 合成腳本（在 ORFS 容器內執行，repo 掛在 /work）。
+#
+# 這個腳本是 Viterbi 合成腳本的原型，所以刻意把幾個關鍵決定先做對：
+#
+# 1. 不用 `synth -flatten`。功耗路徑需要階層才能做 `report_power -instances [get_cells u_acs]`，
+#    而分區塊功耗是 M5 的救命稻草（survivor 記憶體約佔 85% 的面積/能量，總功耗對 SNR
+#    可能幾乎是平的，只有 ACS 那一塊才看得出 SNR 依賴）。
+#
+# 2. 不用 `splitnets`。它會把 `wire [7:0] cnt` 拆成 `\cnt[0]` 這種 escaped identifier，
+#    而 escaped identifier 正是 SAIF annotation 掉到 0% 的經典元兇（Yosys 的命名、
+#    Icarus 的 VCD 命名、OpenSTA 的 parser 三者對不上）。保留向量。
+#
+# 3. `setundef -zero` 放在 abc 之後：讓沒被驅動的 net 有確定值，避免 gate-level 模擬滿是 X。
+
+read_verilog -sv -DSYNTHESIS /work/ppa/smoke/counter.sv
+hierarchy -check -top counter
+
+synth -top counter
+
+dfflibmap -liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+abc        -liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+
+setundef -zero
+opt_clean -purge
+
+tee -o /work/ppa/out/smoke/counter_stat.txt stat -liberty /OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+
+write_verilog -noattr /work/ppa/out/smoke/counter_net.v

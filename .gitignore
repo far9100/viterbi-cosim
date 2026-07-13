@@ -1,0 +1,35 @@
+# 建置與模擬產物：一律不入庫。
+# 唯一例外是 data/ 下的 CSV 與 SAIF —— 它們是報告數字的單一來源與功耗證據（CLAUDE.md §5.4）。
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Verilator / cocotb
+obj_dir/
+sim_build/
+results.xml
+*.o
+*.so
+
+# Icarus
+*.vvp
+
+# 波形：VCD 在 gate-level 是 30-180 KB/cycle，絕不入庫（見 docs 中的 B4 修正）。
+# 入庫的是 vcd2saif.py 產出的 SAIF（O(#nets)，2-10 MB/點）。
+*.vcd
+*.fst
+
+# 合成 / PPA 中間產物
+ppa/out/
+!ppa/out/.gitkeep
+
+# Tier B 激勵檔（10^8 bits 級，由 scripts/gen_stimulus.py 依 manifest 中的 seed 重生）
+*.bin
+*.bits
+
+# 圖：由 script 從 CSV 重生，不入庫
+figures/
+*.png
