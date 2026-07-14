@@ -16,6 +16,7 @@
 import itertools
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -61,20 +62,51 @@ def main():
     run = Run("m2_sweep", milestone="M2")
 
     # ---------- C2′ ----------
+    #
+    # **一道零容忍的閘門不該因為「沒有跑」而看起來像通過。**
+    #
+    # C2′ 的測試需要 torch。第一版在沒有 CUDA 時整個檔案 skip——目前是靠 pytest 對
+    # 「完全沒收集到測試」回傳 exit code 5 才沒有出事。那太脆弱：只要有人把
+    # module-level skip 改成 per-test skip，pytest 就會回傳 0 加上「24 skipped」，
+    # 而這道閘門會靜靜地綠燈。
+    #
+    # 兩層防護：
+    #   (1) 測試本身改成 cpu / cuda 都跑（torch 的邏輯在 CPU 上一樣驗得到），
+    #       所以沒有 GPU 也不會 skip；
+    #   (2) 這裡明確要求**通過數 >= 下限**，不只看 returncode。
+    #
+    # 附帶好處：GPU 被別的專案佔用時，本專案不會被卡住。
+    MIN_C2P = 22        # cpu 這一輪至少要有這麼多個（24 個 - 2 個 cuda-only 的差額）
+
     p = subprocess.run(
         [sys.executable, "-m", "pytest", "sweep/test_c2prime.py", "-q"],
         cwd=REPO, capture_output=True, text=True)
-    n_pass = 0
+    n_pass = n_skip = 0
     for line in p.stdout.splitlines():
-        if "passed" in line:
-            n_pass = int(line.split()[0])
-    run.check("C2' L2-CPU vs L2-GPU 位元級相等", p.returncode == 0,
-              measured=f"{n_pass} 個測試通過", expected="零 mismatch",
-              tolerance="零容忍",
+        m = re.search(r"(\d+) passed", line)
+        if m:
+            n_pass = int(m.group(1))
+        m = re.search(r"(\d+) skipped", line)
+        if m:
+            n_skip = int(m.group(1))
+
+    try:
+        import torch
+        has_cuda = torch.cuda.is_available()
+    except Exception:
+        has_cuda = False
+    ok = (p.returncode == 0) and (n_pass >= MIN_C2P) and (n_skip == 0)
+    run.check("C2' L2-CPU vs L2-torch 位元級相等", ok,
+              measured=f"{n_pass} 通過 / {n_skip} 跳過"
+                       f"（CUDA {'有' if has_cuda else '無 —— 只驗了 CPU 路徑'}）",
+              expected=f">= {MIN_C2P} 通過、0 跳過", tolerance="零容忍",
               detail="涵蓋全部 12 個 (Q,W) 格點（含 4 個會 wrap 的不安全格點）、4 個 D、"
-                     "4 個 clip，外加 GPU 編碼器與量化器的逐位元組比對。"
+                     "4 個 clip，外加 torch 編碼器與量化器的逐位元組比對。"
                      "並證實測試真的碰到平手（85072 次）——torch.minimum 不回傳索引，"
-                     "平手方向選錯不會報錯，只會讓整個掃描的 BER 悄悄偏掉。")
+                     "平手方向選錯不會報錯，只會讓整個掃描的 BER 悄悄偏掉。"
+                     " cpu 與 cuda 兩個裝置都跑：CPU 那一輪驗的是 torch 版的**邏輯**"
+                     "（平手方向、int32 溢位、位元打包的邊界），與 CUDA 無關；"
+                     "有 GPU 時再額外驗 CUDA kernel 這條路。")
 
     # ---------- 全網格 ----------
     grid = []

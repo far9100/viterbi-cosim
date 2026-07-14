@@ -37,12 +37,26 @@ from golden.trellis import viterbi_trellis  # noqa: E402
 from golden.viterbi_fx import decode_fx  # noqa: E402
 
 torch = pytest.importorskip("torch")
-if not torch.cuda.is_available():
-    pytest.skip("需要 CUDA", allow_module_level=True)
 
 from sweep.viterbi_gpu import decode_gpu  # noqa: E402
 
 N_INFO = 256
+
+# torch 的實作在 CPU 上一樣跑得動。刻意**兩個裝置都測**：
+#
+#   cpu   —— 永遠會跑。它驗的是 torch 版的**邏輯**：平手方向、int32 是否溢位、
+#            位元打包（含 bit 31 / bit 63 的邊界）、traceback 的切片索引。
+#            這些 bug 與 CUDA 無關，在 CPU 上就抓得到。
+#   cuda  —— 有 GPU 才跑。它額外驗的是 CUDA kernel 這條路。
+#
+# 為什麼不讓整個檔案在沒有 GPU 時 skip（第一版就是那樣寫的）：
+# **一道零容忍的閘門不該因為「沒有跑」而看起來像通過。** 目前是靠 pytest 對
+# 「完全沒收集到測試」回傳 exit code 5 才沒有出事——那太脆弱了：
+# 只要有人把 module-level skip 改成 per-test skip，pytest 就會回傳 0 加上
+# 「24 skipped」，閘門就會靜靜地綠燈。
+#
+# 附帶好處：GPU 被別的專案佔用時，本專案不會被卡住。
+DEVICES = ["cpu"] + (["cuda"] if torch.cuda.is_available() else [])
 
 
 def _stimulus(t, B, snr, Q, clip, seed):
@@ -55,12 +69,13 @@ def _stimulus(t, B, snr, Q, clip, seed):
     return info, quantize(rx, sigma, Q, clip)
 
 
-def _compare(t, B, snr, Q, W, D, clip, seed):
+def _compare(t, B, snr, Q, W, D, clip, seed, device="cuda"):
     info, rq = _stimulus(t, B, snr, Q, clip, seed)
 
     cpu = decode_fx(rq, t, Q, W, D, N_INFO, mode="window",
                     check_g6=False, keep_history=True)
-    gpu = decode_gpu(rq, t, Q, W, D, N_INFO, mode="window", want_history=True)
+    gpu = decode_gpu(rq, t, Q, W, D, N_INFO, device=device,
+                     mode="window", want_history=True)
 
     for field in ("pm", "surv", "best", "dec"):
         g = gpu[field].cpu().numpy()
@@ -70,36 +85,43 @@ def _compare(t, B, snr, Q, W, D, clip, seed):
             bad = np.argwhere(g != c)
             first = tuple(bad[0])
             raise AssertionError(
-                f"C2' 失敗於 {field}（Q={Q} W={W} D={D} clip={clip} snr={snr}）：\n"
+                f"C2' 失敗於 {field}（device={device} Q={Q} W={W} D={D} "
+                f"clip={clip} snr={snr}）：\n"
                 f"  {len(bad)} / {g.size} 個元素不同，首個位置 {first}\n"
-                f"  CPU={c[first]}  GPU={g[first]}"
+                f"  CPU golden={c[first]}  torch={g[first]}"
             )
     return info, cpu["dec"]
 
 
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("Q,W", [(Q, W) for Q in (3, 4, 5, 6) for W in (8, 10, 12)])
-def test_c2prime_all_qw_cells(Q, W):
+def test_c2prime_all_qw_cells(Q, W, device):
     """涵蓋全部 12 個 (Q, W) 格點——安全的 8 個與不安全的 4 個都要。
 
-    不安全的格點才會真的 wrap；wrap 之後的 modulo 比較是 CPU/GPU 最容易走鐘的地方，
+    不安全的格點才會真的 wrap；wrap 之後的 modulo 比較是最容易走鐘的地方，
     所以它們不能被跳過。
     """
     t = viterbi_trellis()
     # 低 SNR：PM spread 最大，最容易觸發 wraparound
-    _compare(t, B=32, snr=1.0, Q=Q, W=W, D=32, clip=2.0, seed=1000 + Q * 16 + W)
+    _compare(t, B=32, snr=1.0, Q=Q, W=W, D=32, clip=2.0,
+             seed=1000 + Q * 16 + W, device=device)
 
 
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("D", [24, 32, 48, 64])
-def test_c2prime_traceback_depths(D):
-    """回溯深度也要涵蓋——traceback 的向量化在 CPU 與 GPU 是兩份獨立的實作。"""
+def test_c2prime_traceback_depths(D, device):
+    """回溯深度也要涵蓋——traceback 的向量化在 golden 與 torch 是兩份獨立的實作。"""
     t = viterbi_trellis()
-    _compare(t, B=32, snr=3.0, Q=4, W=10, D=D, clip=2.0, seed=2000 + D)
+    _compare(t, B=32, snr=3.0, Q=4, W=10, D=D, clip=2.0,
+             seed=2000 + D, device=device)
 
 
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("clip", [1.5, 2.0, 2.5, 3.0])
-def test_c2prime_clip_levels(clip):
+def test_c2prime_clip_levels(clip, device):
     t = viterbi_trellis()
-    _compare(t, B=32, snr=4.0, Q=3, W=8, D=32, clip=clip, seed=3000 + int(clip * 10))
+    _compare(t, B=32, snr=4.0, Q=3, W=8, D=32, clip=clip,
+             seed=3000 + int(clip * 10), device=device)
 
 
 def test_c2prime_ties_are_actually_exercised():
@@ -149,27 +171,29 @@ def test_c2prime_ties_are_actually_exercised():
     print(f"\n  平手次數 {n_tie}（Q={Q}：軟值只有 8 階，平手本來就常見）")
 
 
-def test_gpu_encoder_matches_cpu():
-    """GPU 的編碼器必須與 CPU 的逐位元組相等。
+@pytest.mark.parametrize("device", DEVICES)
+def test_gpu_encoder_matches_cpu(device):
+    """torch 版的編碼器必須與 numpy 版逐位元組相等。
 
-    GPU 版把 1030 次迭代的編碼迴圈改寫成「移位視窗」一次算完（見 sweep/stimulus.py），
-    這是一個**獨立的實作**，不是翻譯。移位方向或補零長度差一位，
-    產生的碼字就會整體錯開——而 BER 只會「看起來比較差」，不會報錯。
+    torch 版把 1030 次迭代的編碼迴圈改寫成「移位視窗」一次算完（見 sweep/stimulus.py），
+    是一個**獨立的實作**，不是翻譯。移位方向或補零長度差一位，碼字就整體錯開——
+    而 BER 只會「看起來比較差」，不會報錯。
     """
     from sweep.stimulus import GpuStimulus
 
     t = viterbi_trellis()
-    st = GpuStimulus(t)
+    st = GpuStimulus(t, device=device)
     rng = np.random.default_rng(4242)
     info = rng.integers(0, 2, size=(16, N_INFO), dtype=np.uint8)
 
     cpu = t.encode(info)                                          # (B, T, 2) uint8
-    gpu = st.encode(torch.as_tensor(info, dtype=torch.long, device="cuda"))
+    gpu = st.encode(torch.as_tensor(info, dtype=torch.long, device=device))
     assert np.array_equal(gpu.cpu().numpy().astype(np.uint8), cpu)
 
 
-def test_gpu_quantizer_matches_cpu():
-    """GPU 的量化器必須與 CPU 的逐位元組相等（給同一組浮點輸入）。
+@pytest.mark.parametrize("device", DEVICES)
+def test_gpu_quantizer_matches_cpu(device):
+    """torch 版的量化器必須與 numpy 版逐位元組相等（給同一組浮點輸入）。
 
     量化器的方向搞反（r 隨 y 遞增而不是遞減）不會報錯，只會讓 BER 爛掉。
     """
@@ -184,14 +208,15 @@ def test_gpu_quantizer_matches_cpu():
             # 與 stimulus.make 裡同一組公式
             levels = (1 << Q) - 1
             A = clip * sigma
-            yt = torch.as_tensor(y, device="cuda")
+            yt = torch.as_tensor(y, device=device)
             r = torch.round((A - yt) * levels / (2.0 * A))
-            gpu = torch.clamp(r, 0, levels).to(torch.int32).cpu().numpy()
-            assert np.array_equal(gpu, cpu.astype(np.int32)), \
-                f"量化器不一致 @ Q={Q} clip={clip}"
+            got = torch.clamp(r, 0, levels).to(torch.int32).cpu().numpy()
+            assert np.array_equal(got, cpu.astype(np.int32)), \
+                f"量化器不一致 @ device={device} Q={Q} clip={clip}"
 
 
-def test_ber_is_independent_of_W_for_safe_cells():
+@pytest.mark.parametrize("device", DEVICES)
+def test_ber_is_independent_of_W_for_safe_cells(device):
     """安全格點下，BER 與 W 無關——**這是要驗證的，不是要假設的**。
 
     它其實是 G6 的推論：若 modulo 算術導出的每個決策都與無界參考相同，
@@ -210,7 +235,7 @@ def test_ber_is_independent_of_W_for_safe_cells():
         if not w_is_safe(4, W):
             continue
         info, rq = _stimulus(t, 32, 3.0, Q=4, clip=2.0, seed=99)
-        out = decode_gpu(rq, t, Q=4, W=W, D=32, n_info=N_INFO)
+        out = decode_gpu(rq, t, Q=4, W=W, D=32, n_info=N_INFO, device=device)
         dec = out["dec"].cpu().numpy()
         if ref is None:
             ref = dec
