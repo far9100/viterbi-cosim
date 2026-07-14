@@ -1,70 +1,165 @@
 # Makefile —— 一鍵重跑的唯一入口。
 #
-# 每個 target 都只是薄薄一層，實際工作在 scripts/ 底下的 Python 驅動裡。
+# 每個 target 都只是薄薄一層，實際工作在 scripts/ 與 ppa/ 底下的 driver 裡。
 # 這樣做的理由（CLAUDE.md §5.4）：報告裡的每個數字都必須可由 script 重生。
 # 把邏輯藏在 Makefile 的 shell 片段裡，等於讓那些數字失去可重生性。
 #
 # 所有 target 都先 source scripts/env.sh：Verilator/Icarus 來自 oss-cad-suite
 # （$HOME/opt/oss-cad-suite），Python 來自專案的 .venv，兩者的 PATH 順序有講究
 # （.venv 必須壓過 oss-cad-suite 自帶的 python）。
+#
+# ## 2026-07-15 的修訂（重要）
+#
+# 這份 Makefile 一度在**說謊**：`sweep` / `ber` / `report` 分別印出
+# 「M2 / M4 / M6 尚未開始」——而三者早就完成；`ppa` 只跑 M0 的 counter 煙霧測試；
+# `gates` 漏掉 `m4_gate.py` 與 `m5_gate.py`。
+# 而 README 與規格書 §8 都宣稱這幾個指令能「從零重生所有數字與圖表」。
+# **那個宣稱當時是假的。** 所有 driver 都存在，Makefile 只是沒去呼叫它們。
+#
+# 現在每個 target 都接上真正的 driver，而且 `make repro` 會**真的把 data/ 刪光重生**，
+# 用 `git status` 逐位元組驗證那個宣稱。
 
 SHELL := /bin/bash
 PY    := .venv/bin/python
+ENV   := source scripts/env.sh &&
 
-.PHONY: help test env gates freeze sweep ber ppa report clean
+# 續跑用的時間片。grid_runner 與 run_power 都會在預算用盡時「乾淨結束並回傳 1」，
+# 落好快取，重複呼叫即可接著跑。GUARD 是跑掉的迴圈的保險絲。
+BUDGET ?= 420
+GUARD  ?= 60
+
+.PHONY: help test env m1 freeze m2 sweep m3 m4 ber m5 ppa fmax figures \
+        gates report mutate all repro lint tier-a clean distclean
 
 help:
 	@echo "fec-cosim —— K=7 soft Viterbi 的 bit-accurate co-simulation"
 	@echo ""
-	@echo "  make test     golden model 的正確性測試（暴力 ML、K=3 oracle、可重現性）"
-	@echo "  make env      M0：工具鏈驗收（Verilator/Icarus、sm_120 GPU、gate-level 功耗流程）"
-	@echo "  make gates    所有已上線的 known-answer 閘門，寫入 data/gates.csv"
-	@echo "  make freeze   凍結 C2 的測試向量（輸入逐位元組 + 期望輸出的 SHA-256）"
-	@echo "  make sweep    GPU 設計空間掃描 (Q, clip, W, D) x SNR"
-	@echo "  make ber      Tier B 浸泡：解碼位元 XOR，零容忍"
-	@echo "  make ppa      合成 -> gate-level sim -> SAIF -> OpenSTA 分區塊功耗 vs SNR"
-	@echo "  make report   check_paper_numbers.py，必須輸出 mismatches: 0"
+	@echo "  逐里程碑："
+	@echo "    make env       M0：工具鏈驗收（Verilator/Icarus、GPU、gate-level 功耗流程）"
+	@echo "    make m1        M1：L2 golden model + G1-G4（~1 小時，8 workers，可續跑）"
+	@echo "    make freeze    凍結 C2 的測試向量（SHA-256）"
+	@echo "    make m2        M2：GPU 設計空間掃描 + C2'（可續跑）"
+	@echo "    make m3        M3：RTL + Tier A（C2 / G6 正反向 / G7）"
+	@echo "    make m4        M4：Tier B 浸泡（2.47 億個 stage）"
+	@echo "    make m5        M5：合成 -> gate-level -> SAIF -> OpenSTA -> d*（~50 分，可續跑）"
 	@echo ""
-	@echo "里程碑結束時跑 make gates，全綠才進下一階段（CLAUDE.md §4.2）。"
+	@echo "  交付："
+	@echo "    make figures   重生所有圖表"
+	@echo "    make report    check_paper_numbers.py（須 mismatches: 0）"
+	@echo "    make mutate    變異測試：檢查器必須抓得到錯（6/6）"
+	@echo ""
+	@echo "  整條鏈路："
+	@echo "    make all       env -> m1 -> m2 -> m3 -> m4 -> m5 -> figures -> report"
+	@echo "    make repro     **冷跑**：刪光 data/ 從零重生，git status 必須只剩 meta_*.json"
+	@echo ""
+	@echo "  別名：sweep=m2  ber=m4  ppa=m5"
+	@echo ""
+	@echo "里程碑結束時跑該里程碑的 gate，全綠才進下一階段（CLAUDE.md §4.2）。"
 
+# ---------------------------------------------------------------- 單元測試
 test:
-	@source scripts/env.sh && $(PY) -m pytest tests/ -q
+	@$(ENV) $(PY) -m pytest tests/ -q
 
+# ---------------------------------------------------------------- M0
+# m0_gate.py 自帶 counter 的全流程煙霧測試（Yosys -> Icarus -> VCD -> SAIF -> OpenSTA）
 env:
-	@source scripts/env.sh && $(PY) scripts/m0_gate.py
+	@$(ENV) $(PY) scripts/m0_gate.py
 
-# M1 的閘門：G1、G2a、G2b、G3、G4，外加 C1 曲線與 D 軸資料。
-# 依 gates.py 的紀律：任一 gate 失敗就不寫出任何 artifact，process 以 exit 2 結束。
-gates: test
-	@source scripts/env.sh && $(PY) scripts/m1_gate.py
-	@source scripts/env.sh && $(PY) scripts/m2_gate.py
-	@source scripts/env.sh && $(PY) scripts/m3_gate.py
+# ---------------------------------------------------------------- M1
+# m1_gate.py 自己就是量測（Pool(8) + data/cache_m1），跑完直接寫 gate。
+# 約 1 小時；被中斷也沒關係，快取讓它接著跑。
+m1: test
+	@$(ENV) $(PY) scripts/m1_gate.py
 
 freeze:
-	@source scripts/env.sh && $(PY) scripts/freeze_vectors.py
+	@$(ENV) $(PY) scripts/freeze_vectors.py
 
-# RTL 的三重前端檢查（Verilator / Icarus / Yosys）。從第一個 RTL commit 起就跑。
+# ---------------------------------------------------------------- M2
+# grid_runner 在 BUDGET 用盡時乾淨結束並回傳 1（快取已落地）；迴圈直到它回傳 0。
+# GUARD 是保險絲：真正的失敗（例如 GPU 不見了）不該變成無窮迴圈。
+m2:
+	@$(ENV) i=0; \
+	  until BUDGET=$(BUDGET) $(PY) sweep/grid_runner.py; do \
+	    i=$$((i+1)); \
+	    if [ $$i -ge $(GUARD) ]; then echo "**grid_runner 續跑超過 $(GUARD) 輪，中止**"; exit 1; fi; \
+	  done
+	@$(ENV) $(PY) scripts/m2_gate.py
+sweep: m2
+
+# ---------------------------------------------------------------- M3
+# m3_gate.py 自己會呼叫 check_rtl.sh 與 tier_a.sh（MODE=c2 / g6neg）與 g7_icarus.sh
+m3:
+	@$(ENV) $(PY) scripts/m3_gate.py
 lint:
 	@bash scripts/check_rtl.sh
-
-# Tier A：C2 逐 stage 比對。MODE=c2 / g6neg
 tier-a:
 	@MODE=c2 bash scripts/tier_a.sh
 	@MODE=g6neg bash scripts/tier_a.sh
 	@bash scripts/g7_icarus.sh
 
-sweep:
-	@echo "M2 尚未開始"
+# ---------------------------------------------------------------- M4
+m4:
+	@$(ENV) $(PY) scripts/tier_b.py
+	@$(ENV) $(PY) scripts/m4_gate.py
+ber: m4
 
-ber:
-	@echo "M4 尚未開始"
+# ---------------------------------------------------------------- M5
+# synth -> gate-level 功耗（可續跑）-> STA(Fmax) -> SAIF 翻轉分析 -> 機制 -> 歸檔 -> gate
+m5:
+	@$(ENV) $(PY) ppa/synth.py
+	@$(ENV) i=0; \
+	  until $(PY) ppa/run_power.py; do \
+	    i=$$((i+1)); \
+	    if [ $$i -ge $(GUARD) ]; then echo "**run_power 續跑超過 $(GUARD) 輪，中止**"; exit 1; fi; \
+	  done
+	@$(ENV) $(PY) ppa/sta.py
+	@$(ENV) $(PY) ppa/saif_toggle.py
+	@$(ENV) $(PY) scripts/diag_mechanism.py
+	@bash scripts/saif_archive.sh
+	@$(ENV) $(PY) scripts/m5_gate.py
+ppa: m5
+fmax:
+	@$(ENV) $(PY) ppa/sta.py
 
-ppa:
-	@source scripts/env.sh && bash ppa/smoke/run.sh
+# ---------------------------------------------------------------- 交付
+figures:
+	@$(ENV) $(PY) scripts/plot_m1.py
+	@$(ENV) $(PY) scripts/plot_m2.py
+	@$(ENV) $(PY) scripts/plot_m5.py
+
+# 所有已上線的 known-answer 閘門 -> data/gates.csv
+# （第一版漏掉 m4 與 m5 —— 那正是這份 Makefile 之前在說謊的一部分）
+gates:
+	@$(ENV) $(PY) scripts/m1_gate.py
+	@$(ENV) $(PY) scripts/m2_gate.py
+	@$(ENV) $(PY) scripts/m3_gate.py
+	@$(ENV) $(PY) scripts/m4_gate.py
+	@$(ENV) $(PY) scripts/m5_gate.py
 
 report:
-	@echo "M6 尚未開始"
+	@$(ENV) $(PY) scripts/check_paper_numbers.py
 
+# 一個抓不到錯的檢查器沒有價值。注入 6 種已知錯誤，必須每一種都抓到。
+mutate:
+	@bash scripts/mutate_check.sh
+
+all: env m1 freeze m2 m3 m4 m5 figures report mutate
+	@echo ""
+	@echo "整條鏈路完成。"
+
+# **冷跑**：刪光 data/ 從零重生，並用 git status 逐位元組驗證。
+# 這是規格書 §8 的宣稱——在 2026-07-15 之前它從來沒有被測試過。
+repro:
+	@bash scripts/repro.sh
+
+# ---------------------------------------------------------------- 清理
 clean:
 	rm -rf ppa/out/* obj_dir sim_build
 	@echo "已清除模擬與合成產物。data/ 下的 CSV 與 SAIF 不動（那是證據）。"
+
+# distclean 連證據一起刪 —— 只有 repro 該用它，所以要你手動確認。
+distclean:
+	@echo "這會刪掉 data/（含 CSV 與 SAIF 證據）、ppa/out/、figures/。"
+	@echo "git 追蹤的檔案可以用 'git checkout -- data/' 救回；快取與原始 .saif 不行（要重跑）。"
+	@echo "要做這件事請跑 'make repro'（它會先備份）。"
+	@exit 1

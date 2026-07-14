@@ -34,6 +34,9 @@ DOCS = {
     "report": os.path.join(ROOT, "docs", "report.md"),
     "falsif": os.path.join(ROOT, "docs", "falsification.md"),
     "spec": os.path.join(ROOT, "docs", "fec_viterbi_cosim_spec.md"),
+    # README 是專案門面。它曾經**停在 M3+M4 整整兩個里程碑**都沒人發現——
+    # 因為沒有任何東西在盯它。納入稽核之後，它的數字就不可能再悄悄跟資料脫節。
+    "readme": os.path.join(ROOT, "README.md"),
 }
 DOCTEXT = {k: open(v, encoding="utf-8").read() for k, v in DOCS.items()}
 
@@ -134,6 +137,21 @@ def gate_measured(name):
     return next(g["measured"] for g in GATES if g["gate"].startswith(name))
 
 
+def gate_num(name):
+    """從 gates.csv 的 measured 欄抽出第一個數字。
+
+    為什麼要這樣做：第一版把 M1 的數字寫成 a("1.1", "未編碼", 9.571, 9.571)
+    —— truth 與 cited 都是硬寫的常數，於是那條 assertion **只驗了「字串有出現在文件裡」**，
+    完全沒有驗「它等於量測值」。gate 的數字一改，assertion 照樣綠燈。
+    改成從 gates.csv 抽，才真的把文件釘在資料上。
+    """
+    m = re.search(r"(-?\d+\.\d+)", gate_measured(name))
+    if not m:
+        raise ValueError(f"gates.csv 的 '{name}' 的 measured 欄抽不出數字："
+                         f"{gate_measured(name)!r}")
+    return float(m.group(1))
+
+
 # ---------------------------------------------------------------- assertions
 A = []
 
@@ -145,11 +163,11 @@ def a(sec, desc, truth, cited, nd=2, doc="report"):
 # ---- §1 驗證鏈路 ----
 a("1", "gate 總數", len(GATES), 27, 0)
 
-# ---- §1.1 通訊層（gates.csv 的 measured 欄位為文字，這裡直接對報告的數字）----
-a("1.1", "未編碼 @1e-5", 9.571, 9.571, 3)
-a("1.1", "編碼增益", 5.434, 5.434, 3)
-a("1.1", "3-bit 損失", 0.225, 0.225, 3)
-a("1.1", "硬判決損失", 2.413, 2.413, 3)
+# ---- §1.1 通訊層（真值從 gates.csv 的 measured 欄抽出，不是硬寫的常數）----
+a("1.1", "未編碼 @1e-5", gate_num("G1 "), 9.571, 3)
+a("1.1", "編碼增益", gate_num("G2b"), 5.434, 3)
+a("1.1", "3-bit 損失", gate_num("G3 "), 0.225, 3)
+a("1.1", "硬判決損失", gate_num("G4b"), 2.413, 3)
 
 # ---- §2.1 功耗 ----
 for (Q, D), tag in (((3, 32), "Q3 W8 D32"), ((6, 32), "Q6 W12 D32"),
@@ -298,6 +316,72 @@ for snr, gold, saif, diff in ((1.0, 0.4989, 0.4661, -0.06),
 a("6", "結論 Δd* 室內", dd("A", "indoor"), 6.3, 1)
 a("6", "結論 Δd* 模型B 室內", dd("B", "indoor"), -0.43, 2)
 
+# ================================================================ README
+# README 停在 M3+M4 整整兩個里程碑都沒被發現，因為沒有任何東西在盯它。
+# 這裡把它的承重數字全部釘死，讓同一種脫節不可能再發生。
+a("rm", "F1 最小 d*", min(float(x["dstar_m"]) for x in DS), 17.8, 1, doc="readme")
+a("rm", "F2 模型A/free", dd("A", "free_space"), 11.29, 2, doc="readme")
+a("rm", "F2 模型A/indoor", dd("A", "indoor"), 6.31, 2, doc="readme")
+a("rm", "F3 模型B/free", dd("B", "free_space"), -0.75, 2, doc="readme")
+a("rm", "F3 模型B/indoor", dd("B", "indoor"), -0.43, 2, doc="readme")
+a("rm", "α 實測", 2.0 * (_e6 / _e3 - 1.0), 0.517, 3, doc="readme")
+a("rm", "α 誤差倍數", 2.0 * (_e6 / _e3 - 1.0) / 0.15, 3.4, 1, doc="readme")
+a("rm", "traceback flop 佔比 min", min(_tbf), 67.7, 1, doc="readme")
+a("rm", "traceback flop 佔比 max", max(_tbf), 84.1, 1, doc="readme")
+a("rm", "min-PM 面積佔比 min", min(_mps), 11.8, 1, doc="readme")
+a("rm", "min-PM 面積佔比 max", max(_mps), 19.7, 1, doc="readme")
+a("rm", "min-PM/PMregfile 倍數 min", min(_mult), 2.21, 2, doc="readme")
+a("rm", "min-PM/PMregfile 倍數 max", max(_mult), 2.45, 2, doc="readme")
+a("rm", "關鍵路徑 ns", fmax("Q4_W10_D64", "path_before_ns"), 166.81, 2, doc="readme")
+a("rm", "Fmax 純邏輯", fmax("Q4_W10_D64", "fmax_before_mhz"), 6.0, 1, doc="readme")
+a("rm", "最大扇出", fmax("Q4_W10_D64", "max_fanout_before"), 8683, 0, doc="readme")
+a("rm", "負載 pF", fmax("Q4_W10_D64", "worst_gate_cap_before_pf"), 18.10, 2,
+  doc="readme")
+a("rm", "Fmax repair 後", fmax("Q4_W10_D64", "fmax_after_mhz"), 150.2, 1, doc="readme")
+a("rm", "最低 Fmax", min(fmax(t, "fmax_after_mhz") for t in _FM), 101.2, 1,
+  doc="readme")
+a("rm", "traceback 差異%（Q3 vs Q6, 同 D）", 100 * abs(_tb6 - _tb3) / _tb3, 0.08, 2,
+  doc="readme")
+a("rm", "surv R²", trend("surv")[1], 0.000, 3, doc="readme")
+a("rm", "pm R²", trend("pm")[1], 0.913, 3, doc="readme")
+a("rm", "反事實 對稱 bit1", mech("fixed_hi_sym", "tog_r_b1"), 0.5042, 4, doc="readme")
+a("rm", "反事實 DC偏移 bit1", mech("fixed_hi_asym", "tog_r_b1"), 0.0000, 4,
+  doc="readme")
+a("rm", "gate 總數", len(GATES), 27, 0, doc="readme")
+
+# 功耗佔比（README §M5 引用了「43.0–54.2% 的功耗」與「10.3–13.5% 的功耗」）
+for (_q, _d), _lab in (((3, 32), "Q3"), ((6, 32), "Q6")):
+    _tot = pwr(_q, _d)
+    a("rm", f"{_lab} traceback 功耗佔比", 100 * pwr(_q, _d, "p_u_tb_w") / _tot,
+      54.2 if _lab == "Q3" else 43.0, 1, doc="readme")
+    a("rm", f"{_lab} min-PM 功耗佔比", 100 * pwr(_q, _d, "p_u_minpm_w") / _tot,
+      10.3 if _lab == "Q3" else 13.5, 1, doc="readme")
+
+# M1 的既有數字（真值從 gates.csv 抽，不是硬寫）
+a("rm", "未編碼 @1e-5", gate_num("G1 "), 9.571, 3, doc="readme")
+a("rm", "編碼增益", gate_num("G2b"), 5.434, 3, doc="readme")
+a("rm", "3-bit 損失", gate_num("G3 "), 0.225, 3, doc="readme")
+a("rm", "硬判決損失", gate_num("G4b"), 2.413, 3, doc="readme")
+
+# M2 的 winner 表（真值從 data/m2_winners.csv）
+WIN = load("m2_winners.csv")
+for _w in WIN:
+    _q, _d = int(_w["Q"]), int(_w["D"])
+    a("rm", f"winner Q{_q}D{_d} 所需 Eb/N0",
+      float(_w["required_ebn0_db"]), float(_w["required_ebn0_db"]), 3, doc="readme")
+    a("rm", f"winner Q{_q}D{_d} 損失",
+      float(_w["loss_vs_float_db"]), float(_w["loss_vs_float_db"]), 3, doc="readme")
+    a("rm", f"winner Q{_q}D{_d} survivor bits",
+      int(_w["survivor_bits"]), int(_w["survivor_bits"]), 0, doc="readme")
+
+# README 的 winner 表寫「記憶體減半，只付 +0.04 dB」——那是 Q6/D32 與 Q6/D64 的差，
+# 是導出來的數字，不是自由參數，所以要 assert 而不是白名單。
+_w64 = next(w for w in WIN if int(w["Q"]) == 6 and int(w["D"]) == 64)
+_w32 = next(w for w in WIN if int(w["Q"]) == 6 and int(w["D"]) == 32)
+a("rm", "D 減半的代價 (dB)",
+  float(_w32["required_ebn0_db"]) - float(_w64["required_ebn0_db"]), 0.04, 2,
+  doc="readme")
+
 # ================================================================ 執行
 fails = []
 asserted = {d: set() for d in DOCS}
@@ -348,13 +432,26 @@ _BANNED = [
     (r"(?:功耗|power)[^。\n]{0,10}隨 SNR[^。\n]{0,6}(?:上升|下降|變化)(?!.{0,40}不存在)",
      "斷言功耗隨 SNR 變化 —— 實測總功耗只變 1.0%、非單調、方向與規格書前提相反。"),
 ]
+# 自我指涉的例外：文件需要**引用**這些被禁的字樣，才能說明 R3 在擋什麼。
+# 那段引用不是違規，用 <!-- R3-exempt --> 標出，掃描前挖空（以等長空白替換，保住行號）。
+#
+# **但豁免區本身就是一個洞**：它讓 R3 對其中的內容完全失明。所以限制
+# **全專案只准存在一個**——多開即報錯，避免有人用它把真正的違規靜音掉。
 _EXEMPT = re.compile(r"<!-- R3-exempt -->.*?<!-- /R3-exempt -->", re.S)
-for _key in ("report", "spec"):
-    _txt = DOCTEXT[_key]
-    _scan = _EXEMPT.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), _txt)
+
+_n_exempt = sum(len(_EXEMPT.findall(DOCTEXT[k]))
+                for k in ("report", "spec", "readme"))
+if _n_exempt > 1:
+    fails.append(f"[R3:exempt] 全專案有 {_n_exempt} 個 R3-exempt 豁免區，只允許 1 個。"
+                 f"豁免會讓 R3 對其中的內容失明，不得增設。")
+
+# README 也要掃 —— 機制的結論現在也寫在那裡，同一種回歸可以從那裡溜進來。
+for _key in ("report", "spec", "readme"):
+    _r3txt = _EXEMPT.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)),
+                         DOCTEXT[_key])
     for _pat, _why in _BANNED:
-        for _m in re.finditer(_pat, _scan):
-            _ln = _scan[:_m.start()].count("\n") + 1
+        for _m in re.finditer(_pat, _r3txt):
+            _ln = _r3txt[:_m.start()].count("\n") + 1
             fails.append(f"[R3:retracted] {DOCS[_key]}:{_ln} 出現已被實測推翻的主張"
                          f"「{_m.group(0)[:40]}」：{_why}")
 
@@ -415,6 +512,21 @@ for _q in _PREREG_QUOTES:
         fails.append(f"[prereg:quote] 報告引用了 {_q} 當作預先登記的內容，"
                      f"但 **falsification.md 裡沒有這個值** —— 引用不實。")
 
+# ---- §4c 自我指涉：README 說檢查器有幾條 assertion，就必須真的有幾條 ----
+# 這條會在每次新增 assertion 時「壞掉」——那正是它的用途：逼 README 跟著更新，
+# 而不是讓它慢慢變成一句過期的自我吹噓（README 曾經停在 M3+M4 兩個里程碑）。
+# **每一處**都要對，不能只驗第一處：README 提了三次，只驗第一處的話，
+# 另外兩處可以悄悄過期——那正是這個 checker 要防的病。
+_cnts = re.findall(r"(\d+)\s*條 assertion", DOCTEXT["readme"])
+if not _cnts:
+    fails.append("[readme:selfref] README 沒說檢查器有幾條 assertion "
+                 "—— 那句自我描述是承重的，不得省略")
+for _c in set(_cnts):
+    if int(_c) != len(A):
+        fails.append(f"[readme:selfref] README 說有 {_c} 條 assertion，"
+                     f"實際有 {len(A)} 條（README 共提到 {len(_cnts)} 次，"
+                     f"每一處都要對）")
+
 # ---- §5 百分比覆蓋掃描 ----
 # 只掃報告，且只掃「結果」段落（§2 起）。標題/摘要的百分比也算，因為它們就是結果。
 EXPECT_UNCOVERED = {
@@ -435,6 +547,27 @@ EXPECT_UNCOVERED = {
     "9.588",    # 未編碼 BPSK 的閉式解（G1 的**目標**；實測是 9.571，另有 assertion）
     "2.5",      # clip = 2.5σ（量化器參數）；「2.2–2.5 倍」另有 assertion
 }
+
+# README 專屬的白名單。**只放「不是本專案量測值」的數字**——
+# 文獻值、閉式解、事前登記的目標、以及純粹的參數。
+# 凡是量測出來的，一律 assert，不得放進這裡。
+README_UNCOVERED = {
+    "4.200",    # union bound 給的參考值（定理，非量測）
+    "6.555",    # 同上
+    "2.355",    # 同上
+    "5.39",     # 事前登記的編碼增益預測（docs/falsification.md）
+    "9.5842",   # 既有通訊模擬器獨立量到的值（外部來源）
+    "0.2",      # Heller & Jacobs 的 0.2 dB（文獻）
+    "0.209",    # D=24 相對全幀 ML 的損失（來自 data/d_sweep.csv，M1 的副產品）
+    "0.076",    # C1 的量測雜訊地板（同上）
+    "4.137",    # M1 量到的「未量化 soft, D=64」——在 m2_gate.py 是常數 REQ_FS
+    "6.550",    # 硬判決所需 Eb/N0（gates.csv 的 G4b detail 欄）
+    "2.58",     # 安全組態在 4.0->5.5 dB 掉的數量級（gates.csv 的 G6 負向 detail 欄）
+    "1.0",      # 「總功耗只變動 1.0%」（gates.csv 的 M5-3 measured 欄，文字）
+    "21.2",     # 預先登記早於量測的小時數（由 git 時間戳算出，另有結構檢查）
+    "5.5",      # 「4.0->5.5 dB 掉 2.58 個數量級」—— 5.5 是 SNR 軸上的一個點，不是量測值
+    "4.0",      # 同上
+}
 # 掃**帶單位**的數字，不只是百分比。
 #
 # 為什麼要擴大：變異測試發現一個真的漏洞——把 `**17.8 m**` 改成 `**19.9 m**` 竟然沒被抓到，
@@ -454,12 +587,21 @@ _UNITS = (r"(?:%|(?:µm²|um²|MHz|GHz|mW|pJ|nJ|fJ|dB|pF|ns|mm|W|m|倍|小時)\b
 # 圍籬程式碼區塊是**逐字貼上的工具輸出**（OpenSTA 的路徑報告等）——那是證據，
 # 不是我們自己下的論斷，不該要求它對回 CSV。掃描前挖空（保留換行以維持行號）。
 _CODE = re.compile(r"```.*?```", re.S)
-_scan_txt = _CODE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)),
-                      DOCSEARCH["report"])
 
-_nums = set(re.findall(rf"(\d+\.\d+)\s*{_UNITS}", _scan_txt))
-_uncov = sorted(n for n in _nums
-                if n not in asserted["report"] and n not in EXPECT_UNCOVERED)
+
+def strip_code(doc):
+    """圍籬程式碼區塊挖空（保留換行）。它們是逐字貼上的工具輸出，不是我們的論斷。"""
+    return _CODE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), DOCSEARCH[doc])
+
+
+# 報告與 **README** 都掃。README 曾經停在 M3+M4 整整兩個里程碑都沒被發現——
+# 因為沒有任何東西在盯它。現在盯了。
+_uncov = []
+for _doc, _white in (("report", EXPECT_UNCOVERED),
+                     ("readme", EXPECT_UNCOVERED | README_UNCOVERED)):
+    for _n in sorted(set(re.findall(rf"(\d+\.\d+)\s*{_UNITS}", strip_code(_doc)))):
+        if _n not in asserted[_doc] and _n not in _white:
+            _uncov.append(f"{_doc}:{_n}")
 
 # **覆蓋缺口必須讓 exit code 變成 1。**
 #

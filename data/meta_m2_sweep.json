@@ -1,14 +1,14 @@
 {
-  "start_timestamp": "2026-07-14T17:00:53+0800",
+  "start_timestamp": "2026-07-15T00:52:57+0800",
   "argv": [
     "scripts/m2_gate.py"
   ],
-  "git_commit": "b1b96613ddd7bd3e1b124765f27762559d4f521b",
+  "git_commit": "49c2d36a5f185753bab01438e311478d9ec9d12d",
   "git_dirty": true,
   "python": "3.12.3",
   "numpy": "2.4.4",
-  "verilator": "absent",
-  "iverilog": "absent",
+  "verilator": "Verilator 5.051 devel rev v5.050-59-gdde8de0a0 (mod)",
+  "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-286-g15689210c-dirty)",
   "run": "m2_sweep",
   "milestone": "M2"
 }

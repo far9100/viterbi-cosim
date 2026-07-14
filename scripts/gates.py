@@ -150,7 +150,7 @@ class Run:
             json.dump(self.metadata, f, indent=2, ensure_ascii=False)
 
         print(f"\n{self.name}: {len(self.checks)}/{len(self.checks)} 個 gate 全綠。")
-        print(f"  -> data/gates.csv（附加 {len(self.checks)} 列）")
+        print(f"  -> data/gates.csv（取代 {len(self.checks)} 列，冪等）")
         for path, _, rows in self.pending:
             print(f"  -> data/{path}（{len(rows)} 列）")
         print(f"  -> data/meta_{self.name}.json")
