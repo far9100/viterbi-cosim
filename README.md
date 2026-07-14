@@ -71,7 +71,7 @@ make report   # check_paper_numbers.py，必須輸出 mismatches: 0
 |---|---|
 | M0 環境建置與工具鏈驗證 | **完成**（E1/E2/E3 全綠，tag `m0-env`） |
 | M1 L2 定點 golden model + K=7 浮點參考 | **完成**（G1/G2a/G2b/G3/G4a/G4b 全綠，tag `m1-golden`） |
-| M2 GPU 掃描 | 未開始 |
+| M2 GPU 掃描 | **完成**（C2′ 零 mismatch，280 點全網格，4 組 winner，tag `m2-sweep`） |
 | M3 RTL + Tier A | 未開始 |
 | M4 Tier B + G6 浸泡 | 未開始 |
 | M5 PPA + 能量模型 | 未開始 |
@@ -95,3 +95,23 @@ make report   # check_paper_numbers.py，必須輸出 mismatches: 0
 **規格書 v1 的 G2 與 G4 兩道閘門的容差都被證明是錯的**（union bound 這條定理本身就落在
 它們的區間之外）。G2 在開跑前就抓到並修正；G4 是量測之後才發現，已如實標示為事後修正。
 細節見 `docs/fec_viterbi_cosim_spec.md` §6 與 `CHANGELOG.md`。
+
+### M2 的主要結果
+
+**設計空間從 (Q, clip, W, D) 塌成 (Q, clip, D)。** W 不是 BER 的軸——這是 G6 的推論
+（modulo 決策等價 ⇒ 決策與 W 無關 ⇒ 解碼位元與 W 無關），且由 C2′ **直接比對解碼位元**
+驗證，不是假設。每個 Q 的最小安全 W 由字寬界唯一決定（3→8, 4→10, 5→10, 6→12），
+PPA 上沒有選擇餘地。W 只影響面積與功耗。
+
+**Winner 組態**（理由已記錄；刻意不造綜合成本分數——真正的硬體成本要等 M5 合成）：
+
+| 組態 | 所需 Eb/N0 | 損失 | survivor 記憶體 | 挑選理由 |
+|---|---|---|---|---|
+| Q=6, clip=3.0σ, W=12, D=64 | 4.152 dB | +0.015 | 12288 bits | BER 最佳（不計成本） |
+| Q=6, clip=3.0σ, W=12, D=32 | 4.194 dB | +0.057 | **6144 bits** | 記憶體減半，只付 +0.04 dB |
+| Q=4, clip=2.5σ, W=10, D=64 | 4.191 dB | +0.054 | 12288 bits | Q 最小 → ADC 與 ACS 最省 |
+| Q=3, clip=2.0σ, W=8, D=32 | 4.359 dB | +0.222 | 6144 bits | 教科書組態（對照） |
+
+**G6 的負向展示**（`figures/fig_m2_ber_floor.png`）：字寬不足時 **BER 不降反升**。
+安全組態在 4.0→5.5 dB 掉 2.58 個數量級；不安全的 (Q=4,W=8) 在 4→7 dB 反而從 4e-4
+**升到 5e-2**，而 (Q=5,W=8)、(Q=6,W=8) 直接釘在 **BER = 0.5（等同擲硬幣）**。

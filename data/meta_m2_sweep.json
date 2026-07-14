@@ -1,0 +1,14 @@
+{
+  "start_timestamp": "2026-07-14T13:51:25+0800",
+  "argv": [
+    "scripts/m2_gate.py"
+  ],
+  "git_commit": "02433d0f2f34c692632e9fe1df0fb259c2df10f1",
+  "git_dirty": true,
+  "python": "3.12.3",
+  "numpy": "2.4.4",
+  "verilator": "absent",
+  "iverilog": "absent",
+  "run": "m2_sweep",
+  "milestone": "M2"
+}
