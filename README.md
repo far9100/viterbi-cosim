@@ -72,8 +72,8 @@ make report   # check_paper_numbers.py，必須輸出 mismatches: 0
 | M0 環境建置與工具鏈驗證 | **完成**（E1/E2/E3 全綠，tag `m0-env`） |
 | M1 L2 定點 golden model + K=7 浮點參考 | **完成**（G1/G2a/G2b/G3/G4a/G4b 全綠，tag `m1-golden`） |
 | M2 GPU 掃描 | **完成**（C2′ 零 mismatch，280 點全網格，4 組 winner，tag `m2-sweep`） |
-| M3 RTL + Tier A | 未開始 |
-| M4 Tier B + G6 浸泡 | 未開始 |
+| M3 RTL + Tier A | **完成**（C2 22,532 stages 零 mismatch，G6 負向 4/4，G7 通過，tag `m3-rtl`） |
+| M4 Tier B + G6 浸泡 | **完成**（2.47 億 stage 浸泡零 mismatch，tag `m4-tierb`） |
 | M5 PPA + 能量模型 | 未開始 |
 | M6 報告 | 未開始 |
 
@@ -115,3 +115,23 @@ PPA 上沒有選擇餘地。W 只影響面積與功耗。
 **G6 的負向展示**（`figures/fig_m2_ber_floor.png`）：字寬不足時 **BER 不降反升**。
 安全組態在 4.0→5.5 dB 掉 2.58 個數量級；不安全的 (Q=4,W=8) 在 4→7 dB 反而從 4e-4
 **升到 5e-2**，而 (Q=5,W=8)、(Q=6,W=8) 直接釘在 **BER = 0.5（等同擲硬幣）**。
+
+### M3 + M4 的主要結果：C2 的對外宣稱
+
+> **Tier A：32 組 (Q,W,D) × 86 個 frame × 22,532 個 stage 比對，0 mismatch。**
+> 每個 stage 比對 `bm[4]`、`pm[64]`、`survivor[64]`、**解碼位元**。
+>
+> **Tier B：12 個點 × 245,760,000 個資訊位元 / 247,200,000 個 trellis stage，0 mismatch。**
+> 相對 Tier A 擴大 10,971 倍。SHA-256 12/12 對帳相符。
+
+**我們不量 RTL 的 BER。** C2 已證明 RTL ≡ golden 逐位元相等，所以兩條 BER 曲線在數學上
+**是同一條**；重跑上億位元去「重新量」一條已知的曲線不是驗證，是算術。
+BER 由 golden 以 100× 的樣本數量得（M1/M2）。這是方法學上的強項，不是抄捷徑。
+
+**C2 抓到的第一個 RTL bug，正是它存在的理由**：`traceback` 被餵了打拍後的 survivor。
+`bm` / `pm` / `survivor` / `best` **全部完全正確**，只有解碼位元在 frame 頭尾錯掉
+（256 個位元裡錯 3 個）。**全零向量完全測不出來。** 只比 bm/pm/survivor 的 C2
+會讓它完整通過——這就是「解碼位元必須納入比對集」的理由。
+
+**G6 assertion**：M3 證明它在 4 個不安全格點上於 **stage 0** 觸發（實測 spread 181/382/808/776
+分別超過 2^(W−1) 的 128/128/128/512）；M4 證明它在 **2.47 億個 stage** 的低 SNR 浸泡中**全程靜默**。

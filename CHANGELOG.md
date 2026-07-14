@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-07-14（M3 + M4）
+
+- `2026-07-14-25` add — RTL：full-parallel（32 個 radix-2 butterfly）+ **register exchange** 的 traceback。依 `docs/traceback_convention.md` 的 uniform-depth-D 語意——教科書的批次 memory traceback 有效深度落在 [D, 2D]，解碼位元會與凍結文件不同。trellis 表由 RTL 自己從八進位多項式推導，**不從 L2 匯入**（共用一份表會讓表格 bug 變成 common-mode，C2 對它完全盲目）。三重前端（Verilator 5.051 / Icarus 14.0 / Yosys 0.64）從第一個 RTL commit 起就跑。
+- `2026-07-14-26` test — **G5 = C2：32 組 (Q,W,D) × 86 個 frame × 22,532 個 stage 比對，0 mismatch。** 每個 stage 比對 `bm[4]` / `pm[64]` / `survivor[64]` / **解碼位元**，在 `stage_done` 的脈衝上觸發（不靠數 cycle，這也讓折疊架構將來能零成本沿用同一套 TB）。
+- `2026-07-14-27` debug — **C2 抓到的第一個 RTL bug，正是它存在的理由**：`traceback` 被餵了打拍後的 survivor（上一個 stage 的），而 register exchange 的遞迴需要這個 stage 的。症狀極陰險——`bm`/`pm`/`survivor`/`best` **全部完全正確**，只有解碼位元在 frame 頭尾錯掉（256 個位元裡錯 3 個：位置 0、254、255），因為高 SNR 下存活路徑很快收斂。**全零向量完全測不出來**，是全一向量露出來的。只比 bm/pm/survivor 的 C2 會讓這個 bug 完整通過。
+- `2026-07-14-28` debug — G6 的 RTL assertion 第一版寫錯：讓影子 PM **跟著 RTL 的決策走**再量 spread。wraparound 一發生，RTL 讓所有狀態都選到錯的分支，影子的 PM 全擠在窄帶裡（Q=4/W=8 是 181–211），**spread 從不變大，assertion 從不響**。改為 `docs/wordlength_bound.md` §5 定義的**決策等價**：影子自己做無界的正確決策，再比對 RTL 的 survivor。
+- `2026-07-14-29` test — G6 負向 4/4，全部在 **stage 0** 觸發：Q=4/W=8 spread 181>128、Q=5/W=8 382>128、Q=6/W=8 808>128、Q=6/W=10 776>512。而且這些格點上 **C2 仍然零 mismatch**——RTL 與 golden 錯得一模一樣，這本身就是 C2 有效性最強的佐證。
+- `2026-07-14-30` debug — G7（4-state）：cocotb + Icarus 在本機走不通（oss-cad-suite 自帶的 glibc 撐不起 cocotb VPI 要 dlopen 的系統 libpython，GLIBC_2.38；裝系統版 iverilog 需要 root）。改用**檔案驅動**的 SystemVerilog TB，Icarus 這一側完全不碰 Python。10 frames / 2560 bits，C2 零 mismatch 且輸出從未出現 X/Z ⇒ reset 完整。同一支 TB 之後 M5 的 gate-level 模擬也會用到（cocotb 接不上 gate netlist）。
+- `2026-07-14-31` add — **Tier B**：C++ harness **沒有 RNG、也沒有量化器**，只重播 L2 匯出的激勵（stimulus.bin + expected.bits + SHA-256 manifest）。規格書 v1 要求的「C++ 的 AWGN 與 L2 位元級一致」做不到（numpy 的 PCG64 + ziggurat 與任何獨立的 C++ RNG 不可能逐位元組相同，除非共用實作——而共用又讓比對變成同義反覆）。這個做法**更強**：只有一份激勵。
+- `2026-07-14-32` test — **Tier B 浸泡：12 個點 / 245,760,000 個資訊位元 / 247,200,000 個 trellis stage，解碼位元 XOR 0 mismatch**，SHA-256 12/12 對帳相符。相對 Tier A 擴大 **10,971 倍**。G6 的 assertion 在 2.47 億個 stage 的低 SNR 浸泡中**全程靜默**——而 M3 已證明它在 4 個不安全格點上會於 stage 0 響。Verilator 約 600 kHz（比預估的 2–5 MHz 慢，因為 `--assert` 會把 64-state 的 G6 影子 ACS 也編進去）。
+- `2026-07-14-33` audit — 報告必須寫明：**我們不量 RTL 的 BER。** C2 已證明 RTL ≡ golden 逐位元相等，所以兩條 BER 曲線在數學上是同一條；重跑上億位元去「重新量」一條已知的曲線不是驗證，是算術。這是方法學上的強項，不是抄捷徑。
+
 ## 2026-07-14（M2）
 
 - `2026-07-14-18` add — GPU golden model（`sweep/viterbi_gpu.py`，torch 整數版，跨 frame batch）與 **C2′ 閘門**（規格書 v1 漏掉的比對點）。24 個測試涵蓋全部 12 個 (Q,W) 格點（含 4 個會 wrap 的不安全格點）、4 個 D、4 個 clip，以及 GPU 編碼器與量化器的逐位元組比對。**零 mismatch。**

@@ -1,0 +1,36 @@
+{
+  "tag": "Q6_W12_D64_snr3.0",
+  "Q": 6,
+  "W": 12,
+  "D": 64,
+  "clip": 3.0,
+  "snr_db": 3.0,
+  "n_frames": 20000,
+  "n_info": 1024,
+  "T": 1030,
+  "n_bits": 20480000,
+  "seed": 20260714,
+  "code_rate": 0.4970873786407767,
+  "sigma": 0.7100168149940586,
+  "generator": "gpu",
+  "stimulus_file": "stim_Q6_W12_D64_snr3.0.bin",
+  "expected_file": "exp_Q6_W12_D64_snr3.0.bits",
+  "stimulus_sha256": "14fde84170c5455a84e9647804e26a257828b9dfae893c5d2e76eebf6b2aa9ab",
+  "expected_sha256": "c51a555e32543067fc50ddcb79c64568a3f7aa3224b1be4b80677a3434788e12",
+  "stimulus_bytes": 41200000,
+  "expected_bytes": 2560000,
+  "gen_seconds": 93.0,
+  "metadata": {
+    "start_timestamp": "2026-07-14T21:01:01+0800",
+    "argv": [
+      "scripts/tier_b.py"
+    ],
+    "git_commit": "472a224a7158400786e0c1899d63b3ee80fb4c22",
+    "git_dirty": true,
+    "python": "3.12.3",
+    "numpy": "2.4.4",
+    "verilator": "Verilator 5.051 devel rev v5.050-59-gdde8de0a0 (mod)",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-286-g15689210c-dirty)",
+    "run": "gen_stimulus"
+  }
+}
