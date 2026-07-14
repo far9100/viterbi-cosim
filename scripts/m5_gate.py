@@ -247,12 +247,15 @@ def main():
     print(f"\n  總功耗在 1→5 dB 只變動 {tot_var:.1f}%（而且 traceback 的 "
           f"{tb_var:.1f}% 是**非單調**的 —— 那是雜訊，不是趨勢）")
     print(f"  ACS 的 switching 變動 {acs_sw_var:.1f}%。")
-    print("  真正的 SNR 依賴住在**路徑度量累加器 pm**：翻轉率隨 SNR **單調上升 3.3%**"
-          "（見 data/results_m5_toggle.csv）。")
+    print("  真正的 SNR 依賴住在**路徑度量累加器 pm**：翻轉密度對 SNR 的線性迴歸 "
+          "**R² = 0.913**、全距 3.3%（見 data/results_m5_toggle.csv）。")
     print("  pm 是整條資料路徑上**唯一不在最大熵**的訊號（翻轉率 0.30，其餘都是 ~0.47），"
           "因為它是累加器。")
-    print("  其餘每一級（r / bm / surv / RE 暫存器）都被隨機資訊源釘在擲硬幣，"
-          "與 SNR 無關 —— 這就是規格書 §7 那條曲線不存在的原因。")
+    print("  對照：**surv 的 R² = 0.000** —— 倖存者決策與 SNR 的相關性是零。"
+          "bm 0.020、re 0.247 也都無趨勢。")
+    print("  （**不是「單調」**：pm 在 2 dB 有 0.3% 的凹陷。5 個點的「看起來單調」"
+          "不是證據，R² 才是。）")
+    print("  其餘每一級都被隨機資訊源釘在擲硬幣 —— 這就是規格書 §7 那條曲線不存在的原因。")
 
     print("\n=== d* （3 dB 的功耗，η=0.1）")
     for (Q, D), p in sorted(at3.items()):

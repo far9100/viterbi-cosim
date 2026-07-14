@@ -108,19 +108,34 @@ class Run:
             print("半綠的資料比沒有資料更危險——紅燈下產生的 CSV 遲早會被誤用。")
             sys.exit(2)
 
-        # gates.csv：附加，不覆蓋（保留歷史）
+        # gates.csv：以 (milestone, gate) 為鍵**取代**，不是無腦附加。
+        #
+        # 第一版是 append（註解寫「保留歷史」）。但那不是歷史——列裡沒有時間戳，
+        # 分不出哪一列來自哪一次 run，只是**重複**。實際後果：m5_gate.py 跑了 6 次，
+        # gates.csv 就有 6 份一模一樣的 M5 gate；M2 有 3 份。
+        # 而 gates.csv 是報告數字的**單一事實來源**，裡面有陳舊的重複列是會出事的。
+        #
+        # 取代之後這個檔就是冪等的：跑幾次都一樣，也符合「刪掉 data/ 重生會得到相同檔案」
+        # 這條可重生性要求。真正的歷史在 git 裡。
         gpath = os.path.join(DATA, "gates.csv")
-        exists = os.path.exists(gpath)
-        with open(gpath, "a", newline="") as f:
+        old = []
+        if os.path.exists(gpath):
+            with open(gpath, newline="") as f:
+                old = list(csv.DictReader(f))
+
+        new = [{
+            "gate": label, "passed": passed, "measured": measured,
+            "expected": expected, "tolerance": tol, "detail": detail,
+            "milestone": self.milestone,
+        } for label, passed, measured, expected, tol, detail in self.checks]
+
+        keys = {(r["milestone"], r["gate"]) for r in new}
+        merged = [r for r in old if (r["milestone"], r["gate"]) not in keys] + new
+
+        with open(gpath, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=GATES_FIELDS)
-            if not exists:
-                w.writeheader()
-            for label, passed, measured, expected, tol, detail in self.checks:
-                w.writerow({
-                    "gate": label, "passed": passed, "measured": measured,
-                    "expected": expected, "tolerance": tol, "detail": detail,
-                    "milestone": self.milestone,
-                })
+            w.writeheader()
+            w.writerows(merged)
 
         for path, fields, rows in self.pending:
             full = os.path.join(DATA, path)

@@ -145,8 +145,8 @@ def main():
         bx2.axhline(100, color="grey", lw=0.8)
         bx2.set_xlabel("Eb/N0 (dB)")
         bx2.set_ylabel("相對 1 dB (%)")
-        bx2.set_title("只有 pm 隨 SNR 單調上升（+3.3%）\n"
-                      "其餘全是雜訊 —— 這就是功耗平掉的原因")
+        bx2.set_title("只有 pm 有系統性趨勢（R²=0.91，全距 3.3%）\n"
+                      "surv 的 R²=0.000 —— 與 SNR 零相關")
         bx2.grid(alpha=0.3)
         bx2.legend(fontsize=7.5)
 
