@@ -43,11 +43,21 @@ module tb_viterbi_file;
     logic [Q-1:0] r0, r1;
     logic         out_valid, dec_bit, frame_done;
 
-    // 實例名固定叫 dut：M5 的 SAIF scope 是 tb_viterbi_file/dut，兩邊要對得上
+    // 實例名固定叫 dut：M5 的 SAIF scope 是 tb_viterbi_file/dut，兩邊要對得上。
+    //
+    // GATE_LEVEL：合成後的 netlist 沒有參數（Q/W/D 已經被烘焙進去了），
+    // 所以不能用 #(...) 覆寫，否則 iverilog 會報「模組沒有這個參數」。
+`ifdef GATE_LEVEL
+    viterbi_top dut (
+        .clk (clk), .rst (rst), .in_valid (in_valid), .r0 (r0), .r1 (r1),
+        .out_valid (out_valid), .dec_bit (dec_bit), .frame_done (frame_done)
+    );
+`else
     viterbi_top #(.Q(Q), .W(W), .D(D), .NINFO(NINFO)) dut (
         .clk (clk), .rst (rst), .in_valid (in_valid), .r0 (r0), .r1 (r1),
         .out_valid (out_valid), .dec_bit (dec_bit), .frame_done (frame_done)
     );
+`endif
 
     always #5 clk = ~clk;
 
@@ -62,7 +72,7 @@ module tb_viterbi_file;
     integer n_checked;
 
     string  stim_file, dec_file, vcd_file;
-    integer fd, code, i, f, t_i, cyc, got, dec_idx, out_cnt;
+    integer fd, code, i, f, t_i, cyc, got, dec_idx, out_cnt, dump_depth;
 
     initial begin
         errors    = 0;
@@ -78,8 +88,17 @@ module tb_viterbi_file;
         if (!$value$plusargs("frames=%d", n_frames)) n_frames = 1;
 
         if ($value$plusargs("vcd=%s", vcd_file)) begin
+            // dump 的深度很重要。$dumpvars(0, …) 會一路 dump 到 **cell 內部**——
+            // 34k 個 cell × 每個十來條內部 net = 46 萬條 net，模擬慢到不能用，
+            // 而且**OpenSTA 根本不需要它們**：cell 的內部功耗是從 Liberty 的
+            // internal_power 表查出來的，不是從 net 的翻轉算出來的。
+            // OpenSTA 要的只是「連接 cell 之間的那些 net」，也就是 netlist 自己宣告的 net。
+            //
+            // 深度由 +dumpdepth 給；預設 3 = tb.dut 自己 + 子模組 + butterfly 實例，
+            // 剛好停在 cell 之前。覆蓋率由 report_activity_annotation 驗證，不是猜的。
+            if (!$value$plusargs("dumpdepth=%d", dump_depth)) dump_depth = 3;
             $dumpfile(vcd_file);
-            $dumpvars(0, tb_viterbi_file.dut);
+            $dumpvars(dump_depth, tb_viterbi_file.dut);
         end
 
         // 讀激勵（每行 "<r0> <r1>"）

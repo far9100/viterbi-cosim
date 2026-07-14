@@ -343,26 +343,136 @@ OpenSTA 3.1.0：read_saif -scope tb/dut      → report_activity_annotation + re
    `report_activity_annotation -report_unannotated` 是這件事的誠實度量，且被
    `ppa/check_annotation.py` 設為硬性 gate（< 90% 直接失敗）。
 
-**硬性要求**：功耗不得用預設 toggle-rate 猜測，必須用**真實通道資料驅動的 switching activity**。並且量測功耗對 SNR 的依賴性（低 SNR → ACS toggle 率高 → 功耗高），此依賴曲線本身是一個交付結果。
+**硬性要求**：功耗不得用預設 toggle-rate 猜測，必須用**真實通道資料驅動的 switching activity**。
+（M5 實測 annotation coverage = **100%**，8 個點全部。）
+
+> ### ⚠ 本節原本的第二個硬性要求已被實測推翻（M5 事後修訂，**原文保留**）
+>
+> **原文**：「並且量測功耗對 SNR 的依賴性（低 SNR → ACS toggle 率高 → 功耗高），
+> 此依賴曲線本身是一個交付結果。」
+>
+> **實測（`data/results_m5_power.csv`，Q=4 W=10 D=64，1→5 dB）**：
+>
+> | | 變動幅度 | 單調？ |
+> |---|---|---|
+> | 總功耗 | **1.0%** | **否**（43.76 / 43.73 / 44.08 / 43.79 / 44.18 mW）⇒ 是雜訊 |
+> | traceback 功耗 | 1.1% | 否 |
+> | ACS 的 switching | 1.8% | 否 |
+>
+> **這條曲線不存在。** 而且方向與前提相反（高 SNR 反而略高）。
+> 分區塊也救不了它——連 switching power 都只變 1.8%。這是計畫的風險 **R1**，它成真了。
+>
+> **這個交付物改寫為：一個負面結果 + 它的機制。** 機制由 `scripts/diag_mechanism.py`
+> （numpy golden，與 RTL 完全獨立的路徑）與 `ppa/saif_toggle.py`（gate-level SAIF）
+> **雙路徑交叉驗證**，兩者對 survivor 翻轉率的預測吻合到 1% 以內
+> （golden 0.4664/cycle vs SAIF 0.4661/cycle）。
+>
+> #### 機制：位元活動被**隨機資訊源**釘在最大熵，與雜訊無關
+>
+> 1. **輸入端。** 量化器是對稱的：`r(c=1) = (2^Q − 1) − r(c=0)`。而 `2^Q − 1` 是全 1，
+>    所以 `(2^Q−1) − r` **就是 `~r`**（Q 位元的位元補數）。
+>    ⇒ BPSK 的兩個假設被映到**位元互補**的兩個碼。
+>    編碼位元是 i.i.d. uniform ⇒ 編碼位元一翻，**r 的每一個位元都跟著翻**。
+>    ⇒ r 的每位元翻轉率 ≈ 0.5，**在任何 SNR 下都一樣——有沒有雜訊都一樣**。
+>    （實測：`in_r` 翻轉率跨 1→5 dB 只變 **0.61%**。）
+>
+> 2. **Survivor 端。** 狀態遞迴 `s_{t+1} = ((s_t << 1) | u_t) & 63` 使得 `s_t` 的 bit 5
+>    就是 `u_{t−6}`。因此「狀態 `s_{t+1}` 的**正確** survivor bit」=「`s_t ≥ 32`?」
+>    = **`u_{t−6}`，也就是資訊位元本身**（`diag_mechanism.py` 以代數斷言驗證）。
+>    ⇒ **一個完美的 Viterbi 解碼器與一個完全失效的 Viterbi 解碼器，
+>    其 survivor 記憶體的切換活動一模一樣。**
+>    （實測：`surv` 翻轉率 0.4661/0.4618/0.4664/0.4625/0.4659，變動 **0.98%**；
+>    而「真實路徑一致率」從 0.8982 → 1.0000 —— **資訊在增加，活動沒動。**）
+>
+> 3. **唯一的例外：路徑度量 `pm`。** 它是整條資料路徑上**唯一不在最大熵**的訊號
+>    （翻轉率 **0.30**，其餘都是 ~0.47），因為它是**累加器**。
+>    它也是唯一隨 SNR **單調上升**的（+3.3%）。但 min-PM + PM 只佔 ~7–13% 的功耗，
+>    所以稀釋到總功耗只剩 ~1%。
+>
+> **反事實（證明機制，不只是宣稱）**：把量化器的位元互補性打破（加一個整數 DC offset
+> ＝ 真實 ADC 的比較器偏移），則兩個 rail 在某些位元上會**相同**，
+> 那些位元的翻轉率必須崩掉。**實測：bit1 與 bit2 從 0.504 崩到 0.000**，
+> 而 bit0/bit3（兩 rail 相異）維持 0.502–0.504。
+> 定律 `toggle(k) = 0.5 · 1{bit k 在兩個 rail 上相異}` 精確成立。
+>
+> **推論（超出本專案）**：這與 register exchange 無關，也與本設計無關。
+> **任何**接收「編碼過（= 白化過）」訊號的解碼器，其資料路徑活動都會與 SNR 無關——
+> 編碼的作用本來就是白化。規格書的前提隱含假設了「SNR 會改變位元統計」，
+> 但 SNR 只改變位元的**正確性**，而 switching power 只看**統計**。
+>
+> 交付圖：`figures/fig_m5_toggle.png`。四輪預測與修訂記錄（含**兩次我自己的實驗設計錯誤**）
+> 完整保留在 `scripts/diag_mechanism.py` 的 docstring。
 
 ### 兩份 netlist，各有用途（**修訂**）
 
 | netlist | 產生方式 | 用途 |
 |---|---|---|
-| 扁平 | ORFS 預設（`synth -flatten`）+ P&R | 面積、Fmax（post-route STA）、線容上修係數 |
-| **階層** | 自寫 `ppa/syn.ys`，**不 flatten** | **功耗 vs SNR、分區塊（ACS vs traceback）拆解** |
+| **階層** | 自寫 `ppa/synth.py`，**不 flatten** | **面積拆解、分區塊功耗（ACS vs traceback vs min-PM）** |
+| **physical synth** | 上者 + OpenROAD floorplan → place → `repair_design` | **Fmax**（`ppa/sta.py`） |
 
-**為什麼一定要分區塊回報功耗（本階段最大的風險 R1）**：
-D=32 時 survivor 記憶體是 64 states × 3D = **6144 個 flop**，對上 ACS 的 640 個 PM flop
-+ 32 個 butterfly——**約 85% 的面積在 traceback 記憶體**。而 traceback 的活動量幾乎與 SNR 無關
-（不管 SNR 多少，每個 stage 都寫 64 bits）。後果是：**總功耗對 SNR 的依賴可能只有幾個百分點，
-而不是一條曲線**——上面列為交付結果的那條曲線有蒸發的風險。
+（**修訂**：原本規劃「扁平 netlist + P&R」求 Fmax。使用者裁定跳過 full P&R，
+故改為 floorplan + global placement + `repair_design` —— 見下方「Fmax 的陷阱」。
+分區塊功耗需要階層，所以功耗路徑**不能** `synth -flatten`。）
 
-唯一的救法是把功耗拆成 `P_total / P_ACS / P_traceback`，各自對 SNR 作圖，
-證明 SNR 依賴集中在 ACS。這需要階層式 netlist（`report_power -instances [get_cells u_acs]`），
-所以功耗路徑**不能** `synth -flatten`。
+**風險 R1 的裁決：R1 成真了，而且比預期更徹底。**
+原本的預測是「traceback 佔 ~85% 面積 ⇒ 總功耗對 SNR 的依賴可能只有幾個百分點」，
+救法是「分區塊回報，證明 SNR 依賴集中在 ACS」。
 
-M0 的 counter 煙霧測試已經看到這個效應的縮影：8 個 flop + 20 個組合 cell 的設計，
+實測：**分區塊也救不了它。連 ACS 的 switching power 都只變 1.8%，而且非單調。**
+SNR 依賴不是「被 traceback 稀釋」，是**它本來就不存在**（機制見上方的修訂框）。
+
+分區塊仍然是對的做法，但它交付的是**另一個**結果——「能量到底花在哪」：
+
+| | Q3 W8 D32 | Q6 W12 D32 | 隨 W 縮放？ |
+|---|---|---|---|
+| traceback（register exchange） | 13.055 mW (54.2%) | 13.044 mW (43.0%) | **否**（差 0.08%） |
+| ACS（butterfly + PM 暫存器） | 8.146 mW (33.8%) | 12.597 mW (41.5%) | 是（+54.6%） |
+| **min-PM argmin 樹** | 2.482 mW (10.3%) | 4.081 mW (13.5%) | **是（+64.4%，超線性）** |
+| 總計 | 24.090 mW | 30.321 mW | |
+
+**意外發現：min-PM 的 argmin 樹佔 12–20% 的面積 —— 比整個 PM register file 還大。**
+這是選 best-state traceback（而非 fixed-state）的直接、可量測的代價。
+`docs/falsification.md` §3 的事前估計把它**完全漏掉了**（見 §5.2 的檢討）。
+
+### Fmax 的陷阱（M5 實測踩到）
+
+**純邏輯合成的 netlist 上報 Fmax 是沒有意義的。** 直接對 `ppa/out/synth/net_*.v` 跑 OpenSTA
+會得到關鍵路徑 **166 ns（6 MHz）**，但看路徑就知道那不是邏輯延遲：
+
+```
+Fanout     Cap      Delay
+  8683   18.10 pF  102.6 ns   u_ctrl/_111_/Y (sky130_fd_sc_hd__clkinv_1)   <- 一顆最小反相器
+    32    0.08 pF   62.4 ns   u_tb/_19339_/Y (sky130_fd_sc_hd__nand2_1)    <- 這是 slew，不是負載
+```
+
+`u_ctrl` 的 enable 直接扇出到 register exchange 的 **64 states × D 個 flop**（外加每個 flop
+的 enable mux）＝ **8683 個 sink、18.1 pF**，中間**沒有任何 buffer tree**。
+第二顆閘的 62 ns 不是負載造成的，是**轉態時間（slew）**：上一級的邊緣爛到讓它自己也變慢。
+
+**這是流程的缺口，不是架構的極限**：Yosys 的 `abc -liberty` 只做技術映射，
+**不做負載感知的 buffer 插入**——那是 physical synthesis 的工作。
+跑 OpenROAD 的 `repair_design`（floorplan → global placement → 依 liberty 的
+max_cap/max_slew/max_fanout 插 buffer tree）之後：
+
+| 組態 | 純邏輯合成 | 最大扇出 | **+ repair_design** | 最大扇出 | 面積代價 |
+|---|---|---|---|---|---|
+| Q4 W10 D64 | 6.0 MHz | 8683 | **150.2 MHz** | 70 | +3.0% |
+| Q6 W12 D64 | 5.8 MHz | 8937 | **101.2 MHz** | 192 | +3.4% |
+| Q6 W12 D32 | 10.1 MHz | 4840 | **145.3 MHz** | 29 | +3.5% |
+| Q3 W8 D32 | 11.3 MHz | 4395 | **153.1 MHz** | 205 | +3.0% |
+
+**4 個組態的 Fmax 全部 ≥ 101 MHz > 100 MHz ⇒ 能量模型假設的 f_clk = 100 MHz 站得住。**
+
+**這不影響已量到的功耗 / 面積 / d\***：動態能量 `E = α·C·V²` **與頻率無關**
+（`P_dyn ∝ f`，故 `P/f` 是常數），而那個巨大的 C 本來就在 netlist 裡、OpenSTA 算功耗時已計入。
+leakage 確實與 f 有關，但它是 µW 級 vs 動態的 mW 級。
+
+**caveat**：post-placement / **pre-route**，無真實繞線寄生、無 clock tree；
+`repair_design` 只修 DRV、不做 setup 最佳化；typical corner。**真實 Fmax 會更低。**
+PPA 表的面積/功耗來自**修復前**的 netlist；buffer tree 讓面積增加上表所列的 ~3%，
+功耗增量**未量測**，如實揭露。
+
+M0 的 counter 煙霧測試已經看到 sequential 支配的縮影：8 個 flop + 20 個組合 cell 的設計，
 功耗是 **Sequential 88.5% / Combinational 11.5%**。
 
 （另註：ORFS image 內含 `sky130_sram_1rw1r_64x256_8`，64 bits × 256 列，
@@ -382,13 +492,22 @@ E_dec = P_decoder × T_decode / K_info
 - `η_PA ∈ [0.1, 0.5]` 掃描。
 - `P_decoder`：來自 SAIF 流程，分組態、分 SNR。
 
-### 交付圖表
+### 交付圖表（**M5 完成後的實際狀態**）
 
-1. BER vs Eb/N0：各 (Q, W, D) 組態 + 未編碼 + 浮點參考。
-2. C1 量化損失 dB vs Q（含 clip level 的影響）。
-3. E_total vs 距離 d：未編碼 vs Viterbi 各量化組態，標出 d\* 交叉點。
-4. d\* vs Q：頭條圖——「字寬如何移動臨界距離」。
-5. PPA 表：面積 / Fmax / 功耗（分 SNR）/ energy per info bit，三種平行度。
+| # | 交付物 | 檔案 | 狀態 |
+|---|---|---|---|
+| 1 | BER vs Eb/N0：各 (Q,W,D) + 未編碼 + 浮點參考 | `figures/fig_ber_m1.png`、`fig_m2_grid.png` | 完成 |
+| 2 | C1 量化損失 dB vs Q（含 clip level） | `figures/fig_c1_loss.png` | 完成 |
+| 3 | E_total vs 距離 d，標出 d\* 交叉點 | `figures/fig_m5_dstar.png` | 完成 |
+| 4 | **d\* vs Q（頭條圖）** | `figures/fig_m5_dstar_q.png` | 完成 |
+| 5 | PPA 表：面積 / Fmax / 功耗 / energy per info bit | `data/results_m5_*.csv` | **僅 full-parallel（PAR=32）** |
+| 6 | ~~功耗 vs SNR 依賴曲線~~ → **負面結果 + 機制** | `figures/fig_m5_power_snr.png`、`fig_m5_toggle.png` | **改寫（見上方修訂框）** |
+
+**§7 原本要求 PPA 表涵蓋「三種平行度」（PAR = 32 / 8 / 1）。使用者裁定跳過折疊架構，
+故 PPA 表如實標註「僅 full-parallel」。** testbench 本來就設計成可免費複用
+（C2 由 `stage_done` 脈衝觸發，不是數 cycle），折疊版可隨時補上，但不在本次範圍。
+
+**同時未做（不得默示為已驗證）**：post-route P&R、memory traceback 對照、SRAM macro 版本。
 
 ---
 

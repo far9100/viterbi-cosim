@@ -132,6 +132,19 @@ def _parse_header(header, scope_nets, id_to_bits):
             ref = m.group(3).strip()
             base = ref.split()[0]
 
+            # Verilog 的 **escaped identifier**：`\surv[9]` 的名字其實是 `surv[9]`，
+            # 那個反斜線只是跳脫記號，不是名字的一部分。OpenSTA 讀 netlist 時存的是
+            # `surv[9]`，而 Icarus 的 VCD 把反斜線也一起寫出來。
+            #
+            # 少了這一行，SAIF 會寫成 `\surv\[9\]`，OpenSTA 直接 **parse error**，
+            # annotation 掉到 0% —— 而症狀會偽裝成「功耗竟然不隨輸入改變」。
+            #
+            # 為什麼 M0 的 counter 沒抓到：它是扁平設計，沒有 escaped identifier。
+            # 這裡是 Yosys 把 `logic surv [NSTATES]`（**unpacked** array）
+            # 拆成 \surv[0] … \surv[63] 才產生的。
+            if base.startswith("\\"):
+                base = base[1:]
+
             if vid in id_to_bits:
                 # VCD 會把完全相同的訊號共用同一個 id（alias）。
                 # 同一批 Net 物件要同時掛在兩個 scope 下——活動量相同，位置不同。

@@ -18,9 +18,21 @@ results.xml
 *.vvp
 
 # 波形：VCD 在 gate-level 是 30-180 KB/cycle，絕不入庫（見 docs 中的 B4 修正）。
-# 入庫的是 vcd2saif.py 產出的 SAIF（O(#nets)，2-10 MB/點）。
 *.vcd
 *.fst
+
+# SAIF：入庫，但**壓縮後**入庫。
+#
+# 原本這裡寫的是「SAIF 入庫（O(#nets)，2-10 MB/點）」——**那個估計錯了 5-10 倍**。
+# 真實 netlist 有 43 萬條 net，每個 SAIF 是 30-56 MB，10 個點共 466 MB。
+# 直接進 git 是永久性的 repo 膨脹。
+#
+# 但 SAIF 是純文字、結構高度重複，gzip 有 **27.6 倍**：466 MB -> 18 MB。
+# 18 MB 換「功耗數字的原始證據可被任何人重新驗算」是划算的，所以承諾照樣兌現，
+# 只是改成壓縮存放（scripts/saif_archive.sh，附未壓縮檔的 SHA-256 manifest）。
+# ppa/saif_toggle.py 兩種都吃。
+data/saif/*.saif
+!data/saif/*.saif.gz
 
 # 合成 / PPA 中間產物
 ppa/out/
@@ -40,5 +52,7 @@ data/cache_m1/
 data/m1_gate.log
 data/m1_gate.done
 data/cache_m2/
+data/cache_m5/
+data/cache_fmax/
 tb/cocotb/build/
 tb/gl/vectors/
