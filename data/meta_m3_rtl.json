@@ -1,0 +1,14 @@
+{
+  "start_timestamp": "2026-07-14T17:45:45+0800",
+  "argv": [
+    "scripts/m3_gate.py"
+  ],
+  "git_commit": "e7284f5e3855112f13bd4db28fff36134315ae5f",
+  "git_dirty": true,
+  "python": "3.12.3",
+  "numpy": "2.4.4",
+  "verilator": "Verilator 5.051 devel rev v5.050-59-gdde8de0a0 (mod)",
+  "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-286-g15689210c-dirty)",
+  "run": "m3_rtl",
+  "milestone": "M3"
+}

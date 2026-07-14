@@ -37,9 +37,21 @@ env:
 # 依 gates.py 的紀律：任一 gate 失敗就不寫出任何 artifact，process 以 exit 2 結束。
 gates: test
 	@source scripts/env.sh && $(PY) scripts/m1_gate.py
+	@source scripts/env.sh && $(PY) scripts/m2_gate.py
+	@source scripts/env.sh && $(PY) scripts/m3_gate.py
 
 freeze:
 	@source scripts/env.sh && $(PY) scripts/freeze_vectors.py
+
+# RTL 的三重前端檢查（Verilator / Icarus / Yosys）。從第一個 RTL commit 起就跑。
+lint:
+	@bash scripts/check_rtl.sh
+
+# Tier A：C2 逐 stage 比對。MODE=c2 / g6neg
+tier-a:
+	@MODE=c2 bash scripts/tier_a.sh
+	@MODE=g6neg bash scripts/tier_a.sh
+	@bash scripts/g7_icarus.sh
 
 sweep:
 	@echo "M2 尚未開始"

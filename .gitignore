@@ -40,3 +40,5 @@ data/cache_m1/
 data/m1_gate.log
 data/m1_gate.done
 data/cache_m2/
+tb/cocotb/build/
+tb/gl/vectors/
