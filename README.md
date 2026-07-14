@@ -69,10 +69,29 @@ make report   # check_paper_numbers.py，必須輸出 mismatches: 0
 
 | 里程碑 | 狀態 |
 |---|---|
-| M0 環境建置與工具鏈驗證 | **完成**（E1/E2/E3 全綠） |
-| M1 L2 定點 golden model + K=7 浮點參考 | 未開始 |
+| M0 環境建置與工具鏈驗證 | **完成**（E1/E2/E3 全綠，tag `m0-env`） |
+| M1 L2 定點 golden model + K=7 浮點參考 | **完成**（G1/G2a/G2b/G3/G4a/G4b 全綠，tag `m1-golden`） |
 | M2 GPU 掃描 | 未開始 |
 | M3 RTL + Tier A | 未開始 |
 | M4 Tier B + G6 浸泡 | 未開始 |
 | M5 PPA + 能量模型 | 未開始 |
 | M6 報告 | 未開始 |
+
+### M1 的主要結果
+
+所有數字出自 `data/results_m1.csv`，可由 `make gates` 重生。
+
+| 量 | 實測 | 參考 |
+|---|---|---|
+| 未編碼 BPSK @1e-5 | **9.571 dB** | 閉式解 9.588；既有模擬器獨立量到 9.5842 |
+| K=7 軟判決（未量化, D=64）@1e-5 | **4.137 dB** | union bound 給 4.200 |
+| **編碼增益 @1e-5** | **5.434 dB** | 事前登記 5.39（`docs/falsification.md`） |
+| 硬判決 @1e-5 | **6.550 dB** | union bound 給 6.555 |
+| 硬判決損失 | **2.413 dB** | union bound 給 2.355 |
+| 3-bit 量化損失（最佳 clip 2.5σ） | **0.225 dB** | Heller & Jacobs 的 0.2 dB |
+| D=24 相對全幀 ML 的損失 | **+0.209 dB** | D=32/48/64 落在雜訊內 |
+| C1 的量測雜訊地板 | **±0.076 dB** | Q≥4 的損失小於此，需 M2 才分辨得出 |
+
+**規格書 v1 的 G2 與 G4 兩道閘門的容差都被證明是錯的**（union bound 這條定理本身就落在
+它們的區間之外）。G2 在開跑前就抓到並修正；G4 是量測之後才發現，已如實標示為事後修正。
+細節見 `docs/fec_viterbi_cosim_spec.md` §6 與 `CHANGELOG.md`。

@@ -2,3 +2,9 @@ gate,passed,measured,expected,tolerance,detail,milestone
 E1 Verilator + Icarus,True,Verilator 5.051 devel rev v5.050-59-gdde8de0a0 (mod) / Icarus Verilog version 14.0 (devel) (s20260301-286-g15689210c-dirty),兩者皆在,,需要兩個模擬器：Verilator 是 2-state（未初始化的暫存器讀為 0），會隱藏 reset 不完整的 bug；Icarus 是 4-state（讀為 X）。G7 靠它交叉檢查。,M0
 E2 GPU 整數 ACS 位元級相等,True,"sm_120, 平手樣本 123","sm_120, 與 numpy array_equal",,平手樣本數必須 > 0，否則 tie-break 語意根本沒被測到。torch.minimum 不回傳索引，<= 與 < 的選擇會默默決定平手方向——這是 C2' 最可能的失效點。,M0
 E3 SAIF annotation coverage,True,100.00%,>= 99%,,Yosys -> Icarus gate-level -> VCD -> SAIF -> OpenSTA 全線打通。覆蓋率不足時 OpenSTA 不會報錯，只會靜靜地套用預設 toggle-rate 猜測——而規格書 §7 明令禁止那件事。,M0
+G1 未編碼 BPSK @1e-5,True,9.571 dB,9.588 dB,±0.1,通道模型與 AWGN scaling。既有通訊模擬器獨立量到 9.5842 dB。,M1
+G2a 軟判決 BER vs union bound,True,4 個點，最大 實測/界 = 0.981,無顯著違反,零容忍（對顯著性）,軟判決 union bound（重量分布由枚舉算出，已與文獻核對）。界是定理，不是容差。判準為「95% CI 的下緣不得超出界」——界管的是 ML 解碼器，而我們量的是 D=64 的窗口解碼器，且量測本身有雜訊。最大 實測/界 = 0.981 顯示界在高 SNR 相當緊（d_free 主導），符合預期。,M1
+G2b 編碼增益 @1e-5,True,5.434 dB,"[5.0, 5.6] dB",區間,未量化 soft + D=64。編碼端需 4.137 dB。規格書 v1 的 5.0±0.3 偏低——union bound 就給出 ~5.4 dB。,M1
+G3 3-bit 軟判決損失,True,0.225 dB (最佳 clip = 2.5σ),0.20 dB,±0.15,"各 clip 的所需 Eb/N0: 1.5σ:4.38, 2.0σ:4.37, 2.5σ:4.36, 3.0σ:4.52",M1
+G4a 硬判決 BER vs union bound,True,5 個點，最大 實測/界 = 1.034,無顯著違反,零容忍（對顯著性）,硬判決 union bound（BSC 的交越機率 p = Q(sqrt(2·Es/N0))）。界是定理，不是容差。判準為「95% CI 的下緣不得超出界」——界管的是 ML 解碼器，而我們量的是 D=64 的窗口解碼器，且量測本身有雜訊。最大 實測/界 = 1.034 顯示界在高 SNR 相當緊（d_free 主導），符合預期。,M1
+G4b 硬判決損失,True,2.413 dB,"[2.2, 2.7] dB",區間（**事後修正**）,硬判決需 6.550 dB，軟判決需 4.137 dB。union bound 給的參考值是 2.355 dB。規格書 v1 的 2.0±0.3 已被證明不可能達成（見上方註解）。,M1

@@ -11,13 +11,15 @@
 SHELL := /bin/bash
 PY    := .venv/bin/python
 
-.PHONY: help env gates sweep ber ppa report clean
+.PHONY: help test env gates freeze sweep ber ppa report clean
 
 help:
 	@echo "fec-cosim —— K=7 soft Viterbi 的 bit-accurate co-simulation"
 	@echo ""
+	@echo "  make test     golden model 的正確性測試（暴力 ML、K=3 oracle、可重現性）"
 	@echo "  make env      M0：工具鏈驗收（Verilator/Icarus、sm_120 GPU、gate-level 功耗流程）"
-	@echo "  make gates    跑所有已上線的 known-answer 閘門，寫入 data/gates.csv"
+	@echo "  make gates    所有已上線的 known-answer 閘門，寫入 data/gates.csv"
+	@echo "  make freeze   凍結 C2 的測試向量（輸入逐位元組 + 期望輸出的 SHA-256）"
 	@echo "  make sweep    GPU 設計空間掃描 (Q, clip, W, D) x SNR"
 	@echo "  make ber      Tier B 浸泡：解碼位元 XOR，零容忍"
 	@echo "  make ppa      合成 -> gate-level sim -> SAIF -> OpenSTA 分區塊功耗 vs SNR"
@@ -25,11 +27,19 @@ help:
 	@echo ""
 	@echo "里程碑結束時跑 make gates，全綠才進下一階段（CLAUDE.md §4.2）。"
 
+test:
+	@source scripts/env.sh && $(PY) -m pytest tests/ -q
+
 env:
 	@source scripts/env.sh && $(PY) scripts/m0_gate.py
 
-gates: env
-	@echo "（M1 起會有 G1-G4；M3 起會有 G5/G6/G7/C2'）"
+# M1 的閘門：G1、G2a、G2b、G3、G4，外加 C1 曲線與 D 軸資料。
+# 依 gates.py 的紀律：任一 gate 失敗就不寫出任何 artifact，process 以 exit 2 結束。
+gates: test
+	@source scripts/env.sh && $(PY) scripts/m1_gate.py
+
+freeze:
+	@source scripts/env.sh && $(PY) scripts/freeze_vectors.py
 
 sweep:
 	@echo "M2 尚未開始"

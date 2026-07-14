@@ -33,3 +33,9 @@ ppa/out/
 # 圖：由 script 從 CSV 重生，不入庫
 figures/
 *.png
+
+# 量測點的快取。存在的理由是「被砍掉也不用重跑」，不是資料來源——
+# 真正的資料來源是 data/results_m1.csv（由快取彙整而成，且入庫）。
+data/cache_m1/
+data/m1_gate.log
+data/m1_gate.done
