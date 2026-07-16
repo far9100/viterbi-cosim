@@ -161,7 +161,9 @@ def a(sec, desc, truth, cited, nd=2, doc="report"):
 
 
 # ---- §1 驗證鏈路 ----
-a("1", "gate 總數", len(GATES), 27, 0)
+# 26（不是 27）：M2 的 C2′ gate 曾改名（L2-GPU -> L2-torch），舊列在 gates.csv 遺留成孤兒，
+# 把總數灌成 27。移除 stale 列後真正的 gate 數是 26（M0 3 + M1 6 + M2 3 + M3 5 + M4 3 + M5 6）。
+a("1", "gate 總數", len(GATES), 26, 0)
 
 # ---- §1.1 通訊層（真值從 gates.csv 的 measured 欄抽出，不是硬寫的常數）----
 a("1.1", "未編碼 @1e-5", gate_num("G1 "), 9.571, 3)
@@ -347,7 +349,7 @@ a("rm", "pm R²", trend("pm")[1], 0.913, 3, doc="readme")
 a("rm", "反事實 對稱 bit1", mech("fixed_hi_sym", "tog_r_b1"), 0.5042, 4, doc="readme")
 a("rm", "反事實 DC偏移 bit1", mech("fixed_hi_asym", "tog_r_b1"), 0.0000, 4,
   doc="readme")
-a("rm", "gate 總數", len(GATES), 27, 0, doc="readme")
+a("rm", "gate 總數", len(GATES), 26, 0, doc="readme")
 
 # 功耗佔比（README §M5 引用了「43.0–54.2% 的功耗」與「10.3–13.5% 的功耗」）
 for (_q, _d), _lab in (((3, 32), "Q3"), ((6, 32), "Q6")):

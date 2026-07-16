@@ -42,7 +42,7 @@ L2  定點 golden model（Q, W, D 參數化；modulo normalization）
 L3  SystemVerilog RTL → Sky130 gate-level
 ```
 
-**27 個 gate 全綠**（`data/gates.csv`）：M0 環境 3、M1 golden 6、M2 掃描 4、
+**26 個 gate 全綠**（`data/gates.csv`）：M0 環境 3、M1 golden 6、M2 掃描 3、
 M3 RTL 5、M4 浸泡 3、M5 PPA 6。
 
 | 里程碑 | 規模 | 結果 |

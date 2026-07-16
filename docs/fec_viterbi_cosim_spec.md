@@ -611,7 +611,7 @@ fec-cosim/
 2. C2 通過統計可對外宣稱（格式：「N 個測試向量 × M 個 stage 比對，0 mismatch」）。
 3. Winner 組態的 BER 曲線到 10⁻⁶，含信賴區間標註。
 4. d\* 分析完成，證偽條件已裁決。
-5. 所有圖表數字可由 `scripts/` 一鍵重生。
+5. 所有圖表數字可由 `scripts/` 一鍵重生。**已由 `make repro` 實測驗證（2026-07-17）：刪光 `data/` 從零重生，除 `meta_*.json`（時間戳）外每一個 CSV 與 SAIF 逐位元組相同——見 CHANGELOG `2026-07-17-01`。tag `m7-repro`。**
 6. 一句話結論成形，格式：「在 2.4 GHz、η_PA = ___ 的鏈路上，K=7 soft Viterbi 的總能量優勢只在 d > d\* = ___ 時成立；Q 從 3 bits 增至 5 bits 使 d\* 從 ___ 移到 ___。」
 
 ---

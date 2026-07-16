@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-07-17（完整冷跑：從零重生成為實測事實）
+
+- `2026-07-17-01` test — **完整冷跑（`make repro`，含 GPU 的 M2 掃描）：刪光 `data/`（含 GPU 產物 `cache_m2`）從零重生。** M0–M5 全綠、GPU BER 掃描 14 分重算、gate-level 的 f2 SAIF 補回（10 個檔、488→18 MB）。**除 `data/meta_*.json`（時間戳）與 `vectors/MANIFEST.json`（`make freeze` 重寫的 metadata、凍結內容不變）外，`data/` 的每一個 CSV 與 SAIF 都逐位元組重生**——含 `gates.csv`（26 列，正準化生效）與 `results_m2`/`m2_grid`/`m2_winners` 等 GPU 產物。**規格書 §9 的「刪光 data/ 一鍵從零重生」從宣稱變成實測事實。**
+- `2026-07-17-02` debug — **冷跑抓到最後一個 stale：gate 總數被硬寫成 27，真正是 26。** M2 的 C2′ gate 曾改名（`…L2-GPU…` → `…L2-torch…`），舊列在 `gates.csv` 遺留成孤兒、把總數灌成 27（見 `2026-07-16-08` 已移除孤兒列）。但 `docs/report.md`、`README.md` 與 `scripts/check_paper_numbers.py` 仍寫 27（且 report 的分解把 M2 算成 4）。這是「硬寫的期望常數」在真值改變後沒同步的經典破口——而 checker 的 gate 數 assertion（`len(GATES)` 對 27）正好抓到它。改為 26（M0 3 + M1 6 + M2 3 + M3 5 + M4 3 + M5 6），report 190/0、mutate 6/6。
+
 ## 2026-07-16（冷跑抓到的可重生性 bug）
 
 - `2026-07-16-01` debug — **第一次冷跑就抓到 clean 不 hermetic。** `scripts/repro.sh` 的 `rm -rf data ppa/out figures` 漏了 build 狀態，於是 `tb/cocotb/build/_passed/` 的 36 個 stale cocotb pass-marker 沒被清掉。`run_tier_a.py:94` 看到 marker 就 `continue`**跳過模擬本身**：c2 跳過卻仍計入 `C2_TOTAL` 聚合計數 ⇒ m3_gate 讀到假 PASS（**C2 根本沒重跑，是回放舊計數**）；g6neg 跳過 ⇒ 沒有新鮮的「G6 violated」證據 ⇒ 誠實地失敗。**是「g6neg 要求新鮮證據、c2 只信任聚合計數」這個非對稱，擋下了整個 M3 的假綠。** 修法（不是放寬判準）：`repro.sh` 與 `Makefile` 的 clean 都補上 `obj_dir sim_build tb/cocotb/build`，讓 clean 涵蓋所有生成狀態，M3 才會真的重建 32 個 Verilator model。
