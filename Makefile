@@ -154,8 +154,8 @@ repro:
 
 # ---------------------------------------------------------------- 清理
 clean:
-	rm -rf ppa/out/* obj_dir sim_build
-	@echo "已清除模擬與合成產物。data/ 下的 CSV 與 SAIF 不動（那是證據）。"
+	rm -rf ppa/out/* obj_dir sim_build tb/cocotb/build
+	@echo "已清除模擬與合成產物（含 cocotb 的 pass-marker）。data/ 下的 CSV 與 SAIF 不動（那是證據）。"
 
 # distclean 連證據一起刪 —— 只有 repro 該用它，所以要你手動確認。
 distclean:

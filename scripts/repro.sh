@@ -60,8 +60,13 @@ echo "  -> $BAK  ($(du -h "$BAK" | cut -f1))"
 echo "  中止時還原：  cd $REPO && tar xf $BAK && git checkout -- data/"
 
 # ---------------------------------------------------------------- 刪光
-banner "2. 刪光 data/ + ppa/out/ + figures/"
-rm -rf data ppa/out figures
+#
+# clean 一定要 hermetic：生成狀態不只在 data/。cocotb 的 pass-marker 住在
+# tb/cocotb/build/_passed/，Verilator 的產物在 obj_dir/ 與 sim_build/。
+# 第一次冷跑就是漏了 tb/cocotb/build ⇒ run_tier_a.py 看到 stale marker 直接跳過模擬本身，
+# 於是 M3 的 C2 假性通過（回放舊計數、根本沒重跑）。少刪一個目錄，整個 M3 就沒真的重生。
+banner "2. 刪光 data/ + ppa/out/ + figures/ + 所有 build 狀態"
+rm -rf data ppa/out figures obj_dir sim_build tb/cocotb/build
 mkdir -p data
 echo "  已刪。git 現在應該看到大量 deleted："
 git status --short -- data | head -5

@@ -37,8 +37,11 @@ FIELDS = ["Q", "clip", "W", "D", "snr_db", "ber", "n_errors", "n_bits",
 
 
 def load_all():
+    # sorted()：os.listdir 的列舉順序依檔案系統而定，不確定。快取重建後（檔案以不同順序落地）
+    # 列舉順序就會變，讓下游寫出的 results_m2.csv 列序跟著變——280 個數字逐位元組相同、只有列序不同，
+    # 於是可重生性驗證會誤報「不重生」。先把 listdir 排序，杜絕這個上游的不確定性。
     rows = []
-    for f in os.listdir(CACHE):
+    for f in sorted(os.listdir(CACHE)):
         if f.endswith(".json"):
             with open(os.path.join(CACHE, f)) as fh:
                 rows.append(json.load(fh))
@@ -193,7 +196,12 @@ def main():
     run.csv("m2_ber_floor.csv",
             ["Q", "W", "snr_lo", "ber_lo_snr", "snr_hi", "ber_hi_snr",
              "decades_dropped"], floors)
-    run.csv("results_m2.csv", FIELDS, [{k: r[k] for k in FIELDS} for r in rows])
+    # 寫出前依正準鍵排序，讓 results_m2.csv 的列序**只**由資料內容決定，與 os.listdir 無關。
+    # 這是報告數字的唯一來源，必須逐位元組可重生；排序是達成那件事的最後一道保險。
+    rows_sorted = sorted(rows, key=lambda r: (r["Q"], r["clip"], r["W"], r["D"],
+                                              r["snr_db"]))
+    run.csv("results_m2.csv", FIELDS,
+            [{k: r[k] for k in FIELDS} for r in rows_sorted])
 
     print("\n=== 全網格：相對未量化浮點（4.137 dB）的損失，dB")
     print("                    D=24    D=32    D=48    D=64")

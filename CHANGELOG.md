@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 2026-07-16（冷跑抓到的可重生性 bug）
+
+- `2026-07-16-01` debug — **第一次冷跑就抓到 clean 不 hermetic。** `scripts/repro.sh` 的 `rm -rf data ppa/out figures` 漏了 build 狀態，於是 `tb/cocotb/build/_passed/` 的 36 個 stale cocotb pass-marker 沒被清掉。`run_tier_a.py:94` 看到 marker 就 `continue`**跳過模擬本身**：c2 跳過卻仍計入 `C2_TOTAL` 聚合計數 ⇒ m3_gate 讀到假 PASS（**C2 根本沒重跑，是回放舊計數**）；g6neg 跳過 ⇒ 沒有新鮮的「G6 violated」證據 ⇒ 誠實地失敗。**是「g6neg 要求新鮮證據、c2 只信任聚合計數」這個非對稱，擋下了整個 M3 的假綠。** 修法（不是放寬判準）：`repro.sh` 與 `Makefile` 的 clean 都補上 `obj_dir sim_build tb/cocotb/build`，讓 clean 涵蓋所有生成狀態，M3 才會真的重建 32 個 Verilator model。
+- `2026-07-16-02` debug — **`data/results_m2.csv` 的列序不確定。** `scripts/m2_gate.py` 的 `load_all()` 以 `os.listdir(CACHE)`（未排序）列舉快取、直接寫進 CSV；快取重建後檔案落地順序不同 ⇒ 280 列的**值逐位元組相同、只有列序會變**（整數 Viterbi + 固定 seed ⇒ 數字必然逐位元組相同）。而它是報告數字的單一事實來源，列序漂移會讓冷跑誤報「不重生」。修法：`load_all()` 的 listdir 排序，且寫出前依正準鍵 `(Q,clip,W,D,snr_db)` 排序。**已驗證：正準化後的 CSV 與 HEAD 排序後逐位元組相同（280 列值不變），`m2_grid/winners/floor` 不受影響、`check_paper_numbers.py` 不讀 `results_m2.csv`（M2 數字取自 `m2_grid/winners`）故稽核不受影響。**
+
 ## 2026-07-15（M6：報告 + 數字稽核）
 
 - `2026-07-15-01` add — **`docs/report.md`**：全文的每個數字都由 `data/*.csv` 現算。寫作順序刻意是「先跑 `scripts/report_numbers.py`、再照抄它的輸出」——反過來（先寫報告再找數字對照）就是論文數字與資料脫節的標準死法。
