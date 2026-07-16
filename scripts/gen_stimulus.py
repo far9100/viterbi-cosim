@@ -107,6 +107,10 @@ def generate(Q, W, D, clip, snr_db, n_frames, n_info, seed, outdir, use_gpu=True
     dt = time.time() - t0
     n_bits = n_frames * n_info
 
+    # 入庫的 manifest 只含可逐位元組重生的內容（設定 + SHA-256 + 位元組數）。
+    # gen_seconds（wall-clock）與 metadata（start_timestamp / git_commit，每次都變）**不入檔**
+    # ——否則 manifest 永遠無法逐位元組重生（冷跑抓到過）。run 層級的 metadata 已完整記在
+    # data/meta_m4_tierb.json（冷跑已豁免），per-point 的那份是多餘的。
     manifest = {
         "tag": tag,
         "Q": Q, "W": W, "D": D, "clip": clip,
@@ -120,13 +124,12 @@ def generate(Q, W, D, clip, snr_db, n_frames, n_info, seed, outdir, use_gpu=True
         "expected_sha256": _sha256_file(exp_path),
         "stimulus_bytes": os.path.getsize(stim_path),
         "expected_bytes": os.path.getsize(exp_path),
-        "gen_seconds": round(dt, 1),
-        "metadata": collect_metadata({"run": "gen_stimulus"}),
     }
     with open(man_path, "w") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
-    return manifest
+    # 回傳值另附 gen_seconds 供 console 即時回饋（不入檔）。
+    return {**manifest, "gen_seconds": round(dt, 1)}
 
 
 def verify(man_path):

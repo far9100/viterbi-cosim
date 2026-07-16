@@ -18,19 +18,5 @@
   "stimulus_sha256": "c2c568a27d9534d395a5e22d87dd3b60e561dedab207baec43daf382010f9ae0",
   "expected_sha256": "5e38c9915f793052e1a5cf4ca0bfc88aaf8ad75cbc6618d7cec04f867718975a",
   "stimulus_bytes": 41200000,
-  "expected_bytes": 2560000,
-  "gen_seconds": 92.8,
-  "metadata": {
-    "start_timestamp": "2026-07-14T21:02:34+0800",
-    "argv": [
-      "scripts/tier_b.py"
-    ],
-    "git_commit": "472a224a7158400786e0c1899d63b3ee80fb4c22",
-    "git_dirty": true,
-    "python": "3.12.3",
-    "numpy": "2.4.4",
-    "verilator": "Verilator 5.051 devel rev v5.050-59-gdde8de0a0 (mod)",
-    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-286-g15689210c-dirty)",
-    "run": "gen_stimulus"
-  }
+  "expected_bytes": 2560000
 }

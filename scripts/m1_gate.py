@@ -306,8 +306,12 @@ def main():
                      f"規格書 v1 的 2.0±0.3 已被證明不可能達成（見上方註解）。")
 
     # ---------- 交付資料 ----------
+    # imap_unordered 回來的列序依 worker 完成順序而定，不確定。依正準鍵（config, ebn0_db）
+    # 排序，讓 results_m1.csv 的列序只由資料內容決定，與排程無關。
+    # 這與 results_m2.csv（Bug B）是同一類的列序不確定性——冷跑抓到了它。
+    rows_sorted = sorted(rows, key=lambda r: (r["config"], r["ebn0_db"]))
     run.csv("results_m1.csv", RESULT_FIELDS,
-            [{k: r.get(k, "") for k in RESULT_FIELDS} for r in rows])
+            [{k: r.get(k, "") for k in RESULT_FIELDS} for r in rows_sorted])
 
     # C1：量化損失 vs (Q, clip)
     c1 = []

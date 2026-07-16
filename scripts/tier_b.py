@@ -177,8 +177,13 @@ def main():
               f"G6={'響了!' if r['g6_fired'] else '靜默'}  "
               f"{r['sim_khz']:.0f} kHz")
 
+    # gen_s / sim_s / sim_khz 是 wall-clock 遙測（每次都會變），不是科學結果——不入 git 追蹤的
+    # 證據檔（tierb.json 要逐位元組可重生）。科學結果（mismatch / SHA-256 / bits）才是證據；
+    # 吞吐量只在上面的 console 即時回饋。
+    _timing = ("gen_s", "sim_s", "sim_khz")
+    persisted = [{k: v for k, v in r.items() if k not in _timing} for r in rows]
     with open(os.path.join(DATA, "tierb.json"), "w") as f:
-        json.dump(rows, f, indent=2, ensure_ascii=False)
+        json.dump(persisted, f, indent=2, ensure_ascii=False)
 
     n_ok = sum(r["ok"] for r in rows)
     tot_bits = sum(r["n_bits"] for r in rows)

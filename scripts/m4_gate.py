@@ -26,9 +26,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from scripts.gates import DATA, Run  # noqa: E402
 
+# sim_khz（Verilator 吞吐量）是 wall-clock 遙測，隨機器負載而變，不是科學結果——不入
+# results_m4.csv（它是報告數字的來源，須逐位元組可重生）。科學結果是 mismatch / SHA / bits。
 FIELDS = ["tag", "Q", "W", "D", "clip", "snr_db", "n_frames", "n_bits",
           "n_stages", "mismatches", "out_bad", "sha256_ok", "g6_fired",
-          "sim_khz", "stimulus_sha256", "expected_sha256"]
+          "stimulus_sha256", "expected_sha256"]
 
 
 def main():
@@ -46,7 +48,6 @@ def main():
     tot_stages = sum(r["n_stages"] for r in rows)
     n_mis = sum(max(r["mismatches"], 0) for r in rows)
     n_bad = sum(max(r["out_bad"], 0) for r in rows)
-    khz = sum(r["sim_khz"] for r in rows) / max(n_pts, 1)
 
     # ---------- G8a：延伸 C2 浸泡 ----------
     run.check("G8a Tier B：延伸 C2 浸泡", n_mis == 0 and n_bad == 0 and tot_bits > 0,
@@ -86,7 +87,6 @@ def main():
     print(f"    {n_pts} 個 (winner 組態 × SNR) 點")
     print(f"    {tot_bits:,} 個資訊位元 / {tot_stages:,} 個 trellis stage")
     print(f"    解碼位元逐位元 XOR：**0 mismatch**")
-    print(f"    Verilator 平均 {khz:.0f} kHz（開著 G6 assertion）")
     print(f"\n    相對 Tier A（22,532 個 stage）擴大了 "
           f"{tot_stages/22532:.0f} 倍")
 

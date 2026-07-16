@@ -108,12 +108,22 @@ def main():
 
     conv = []
     for Q, W, D, clip, snr, f in conv_jobs:
+        # 收斂點也納入可續跑的預算：預算用盡就乾淨結束並回傳 1，讓 until 迴圈續跑。
+        # 原本是 break——但 break 之後仍 return 0，會讓某個收斂點（例如 f2）被靜靜丟掉，
+        # 而 power.json 少一個點卻仍被當成功。冷跑抓到過這個不確定性（f2 有時在、有時不在）。
+        # point() 有快取，續跑時已算過的點瞬間返回，最後一趟全命中才寫出完整、確定的 power.json。
         if time.time() - t0 > 520:
-            break
+            print("時間預算用盡（收斂點），乾淨結束。再跑一次即可續做。")
+            return 1
         conv.append(point(Q, W, D, clip, snr, frames=f))
 
+    # sim_s / wall_s 是 wall-clock 遙測，每次都會變，不是科學結果。它們不入 git 追蹤的證據檔
+    # （否則 power.json 永遠無法逐位元組重生）；功耗數值 p_*_w 才是證據。run 層級的計時另有記錄。
+    def _no_timing(r):
+        return {k: v for k, v in r.items() if k not in ("sim_s", "wall_s")}
     with open(os.path.join(DATA, "power.json"), "w") as f:
-        json.dump({"points": rows, "convergence": conv}, f, indent=2)
+        json.dump({"points": [_no_timing(r) for r in rows],
+                   "convergence": [_no_timing(r) for r in conv]}, f, indent=2)
     print(f"\n-> data/power.json（{len(rows)} 個點）")
     return 0
 
