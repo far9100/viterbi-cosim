@@ -132,6 +132,14 @@ class Run:
         keys = {(r["milestone"], r["gate"]) for r in new}
         merged = [r for r in old if (r["milestone"], r["gate"]) not in keys] + new
 
+        # 依 milestone 穩定排序，讓 gates.csv 的列序是**確定的**（M0..M5），與 gate 的執行順序無關。
+        # 否則單獨重跑某個里程碑的 gate 會用 replace-by-key 把它的列搬到檔尾，讓列序漂移；
+        # 完整冷跑（m0->m5 依序）本來就產生 M0..M5 的順序，這個排序讓「單獨重跑」也收斂到同一序，
+        # 於是 gates.csv 對「刪光重生」逐位元組可重生（冷跑對 gates.csv 用的是嚴格判準）。
+        # 穩定排序保留同一 milestone 內的 check() 呼叫順序。
+        milestone_order = {f"M{i}": i for i in range(10)}
+        merged.sort(key=lambda r: milestone_order.get(r["milestone"], 99))
+
         with open(gpath, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=GATES_FIELDS)
             w.writeheader()
