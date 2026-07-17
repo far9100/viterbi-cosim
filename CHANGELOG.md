@@ -4,6 +4,7 @@
 
 - `2026-07-17-01` test — **完整冷跑（`make repro`，含 GPU 的 M2 掃描）：刪光 `data/`（含 GPU 產物 `cache_m2`）從零重生。** M0–M5 全綠、GPU BER 掃描 14 分重算、gate-level 的 f2 SAIF 補回（10 個檔、488→18 MB）。**除 `data/meta_*.json`（時間戳）與 `vectors/MANIFEST.json`（`make freeze` 重寫的 metadata、凍結內容不變）外，`data/` 的每一個 CSV 與 SAIF 都逐位元組重生**——含 `gates.csv`（26 列，正準化生效）與 `results_m2`/`m2_grid`/`m2_winners` 等 GPU 產物。**規格書 §9 的「刪光 data/ 一鍵從零重生」從宣稱變成實測事實。**
 - `2026-07-17-02` debug — **冷跑抓到最後一個 stale：gate 總數被硬寫成 27，真正是 26。** M2 的 C2′ gate 曾改名（`…L2-GPU…` → `…L2-torch…`），舊列在 `gates.csv` 遺留成孤兒、把總數灌成 27（見 `2026-07-16-08` 已移除孤兒列）。但 `docs/report.md`、`README.md` 與 `scripts/check_paper_numbers.py` 仍寫 27（且 report 的分解把 M2 算成 4）。這是「硬寫的期望常數」在真值改變後沒同步的經典破口——而 checker 的 gate 數 assertion（`len(GATES)` 對 27）正好抓到它。改為 26（M0 3 + M1 6 + M2 3 + M3 5 + M4 3 + M5 6），report 190/0、mutate 6/6。
+- `2026-07-17-03` audit — **專案定案。** 規格書 §10 的六項 Definition of Done 全部達成並實測驗證：gate 全綠、C2 對外統計成形、BER 曲線到 1e-6 含 CI、d\* + 證偽條件裁決、`make repro` 一鍵從零重生（tag `m7-repro`）、一句話結論以真數字填在 `report.md` §6。規格書 §10 補上定案註記並指向 report §6（澄清實際掃到 Q3→Q6，非模板示意的 3→5 bit）。**如實重申邊界，不因定案而默示為更強**：d\* 的絕對值是**上界**（survivor 用 flop 陣列非 SRAM macro，高估面積/E_dec/d\*）；PPA 僅 full-parallel（PAR=32）；ADC 為敏感度線非量測；折疊架構 / post-route P&R / memory-traceback 未做——全部見 `report.md` §5。延伸方向（Polar SC 等）依 CLAUDE.md §4.3 需另行書面確認，本次不開工。
 
 ## 2026-07-16（冷跑抓到的可重生性 bug）
 

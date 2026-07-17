@@ -89,6 +89,11 @@ make repro    # **冷跑**：刪光 data/ 從零重生，逐位元組驗證
 | M4 Tier B + G6 浸泡 | **完成**（2.47 億 stage 浸泡零 mismatch，tag `m4-tierb`） |
 | M5 PPA + 能量模型 | **完成**（8 個點 100% annotation，三條證偽條件全部裁決，tag `m5-ppa`） |
 | M6 報告 + 數字稽核 | **完成**（190 條 assertion / 0 mismatch，變異測試 6/6，tag `m6-report`） |
+| M7 完整冷跑（可重生性） | **完成**（`make repro` 刪光 `data/` 從零重生、逐位元組相同，tag `m7-repro`） |
+
+**專案定案（2026-07-17）：規格書 §10 的六項 Definition of Done 全部達成並實測驗證。**
+已揭露的邊界（d\* 為上界、PPA 僅 full-parallel、ADC 敏感度線、折疊/post-route/memory-traceback 未做）
+見 `docs/report.md` §5，不因定案而默示為已驗證。
 
 完整報告見 **`docs/report.md`**。
 

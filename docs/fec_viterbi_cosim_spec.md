@@ -614,6 +614,13 @@ fec-cosim/
 5. 所有圖表數字可由 `scripts/` 一鍵重生。**已由 `make repro` 實測驗證（2026-07-17）：刪光 `data/` 從零重生，除 `meta_*.json`（時間戳）外每一個 CSV 與 SAIF 逐位元組相同——見 CHANGELOG `2026-07-17-01`。tag `m7-repro`。**
 6. 一句話結論成形，格式：「在 2.4 GHz、η_PA = ___ 的鏈路上，K=7 soft Viterbi 的總能量優勢只在 d > d\* = ___ 時成立；Q 從 3 bits 增至 5 bits 使 d\* 從 ___ 移到 ___。」
 
+**專案定案（2026-07-17）：以上六項全部達成。** item 1–5 由各里程碑的 gate 與 `make repro`
+（tag `m7-repro`）坐實；item 6 的具體一句話結論（帶 CSV 撐腰的真數字）見 `docs/report.md` §6。
+上方模板以「3 bits 增至 5 bits」示意，**實際掃到的是 Q3→Q6**（規格書 §3 定案 Q∈{3,4,5,6}），
+實現的結論以 report §6 為準。專案在其**自訂範圍內**完成；`report.md` §5 如實列出的未做項目
+（折疊架構 PAR=8/1、post-route P&R、SRAM macro survivor 記憶體、memory-traceback 對照）
+與 d\* 為**上界**的性質維持原樣，不因「定案」而默示為已驗證。
+
 ---
 
 ## 11. Coding agent 工作守則（每次開工前重讀）
