@@ -43,7 +43,7 @@ def groups(safe):
 
 
 def run_one(sim, Q, W, D, vec_names, workdir, assertions=True,
-            module="test_viterbi"):
+            module="test_viterbi", rtl_dir="rtl"):
     """建置 + 跑一組。回傳 (通過?, **含模擬器在內**的完整輸出)。
 
     一定要用 subprocess + capture_output：cocotb 的 runner 把模擬器當子行程啟動，
@@ -58,6 +58,7 @@ def run_one(sim, Q, W, D, vec_names, workdir, assertions=True,
         "FEC_REPO": REPO,
         "FEC_SIM": sim,
         "FEC_TEST_MODULE": module,
+        "FEC_RTL_DIR": rtl_dir,
         "FEC_Q": str(Q), "FEC_W": str(W), "FEC_D": str(D),
         "FEC_NINFO": str(NINFO),
         "FEC_VECTORS": ",".join(vec_names),
@@ -79,6 +80,11 @@ def main():
 
     if mode == "g7":
         # 用 Icarus 跑一組有代表性的（4-state），證明 reset 是完整的
+        g = {k: v for k, v in groups(safe=True).items() if k == (4, 10, 32)}
+    elif mode == "c2lp":
+        # rtl_lowpower/ 的 C2。只跑一組有代表性的即可 —— 這道檢查回答的是
+        # 「reset 寫法的改寫是否語意等價」，那與 (Q,W,D) 無關；
+        # 資料路徑本身已由 rtl/ 的 32 組驗過。
         g = {k: v for k, v in groups(safe=True).items() if k == (4, 10, 32)}
     elif mode == "ctrl":
         # 控制路徑：stall / frame_done / 幀中 reset / 背靠背。
@@ -106,7 +112,7 @@ def main():
     # 違規證據，而 c2 信任聚合計數器」才抓到 stale marker 讓 M3 假性通過。
     # 所以修法不是讓 marker 去存證據（那會毀掉這個不對稱），而是**不要快取 g6neg**：
     # 它只有 4 組、實測重跑 1.6 秒，用 1.6 秒換一道 gate 的全部證據，是划算的。
-    use_marks = mode not in ("g6neg", "ctrl")
+    use_marks = mode not in ("g6neg", "ctrl", "c2lp")
 
     total_frames = total_stages = 0
     n_done = 0
@@ -145,6 +151,17 @@ def main():
             why = (f"G6 觸發（{ev}）+ C2 零 mismatch" if ok else
                    f"G6={'觸發' if fired else '**沒觸發**'}, "
                    f"C2={'通過' if passed else '失敗'}")
+        elif mode == "c2lp":
+            passed, out2 = run_one(sim, Q, W, D, names, wd + "_lp",
+                                   assertions=True, rtl_dir="rtl_lowpower")
+            fired = "G6 violated" in out2
+            stats = re.search(r"C2_STATS (\d+) (\d+) (\d+) (\d+) (\d+)", out2)
+            fr = int(stats.group(4)) if stats else 0
+            st = int(stats.group(5)) if stats else 0
+            ok = passed and not fired and fr > 0
+            why = ("rtl_lowpower C2 零 mismatch，G6 未誤觸發" if ok else
+                   f"C2={'通過' if passed else '失敗'}, "
+                   f"G6={'**誤觸發**' if fired else '正常'}")
         elif mode == "ctrl":
             passed, out2 = run_one(sim, Q, W, D, names, wd, assertions=True,
                                    module="test_ctrl")

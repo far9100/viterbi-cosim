@@ -68,6 +68,24 @@ def main():
                      "先驗不安全的格點。而且這些格點上 **C2 仍然零 mismatch**："
                      "RTL 與 golden 錯得一模一樣，這本身就是 C2 有效性的強力佐證。")
 
+    # ---------- M3-2 rtl_lowpower 的 C2 ----------
+    #
+    # `rtl_lowpower/` 是 M9 的 B0'/B1' 所合成的原始碼，也就是 -42.7% 功耗與
+    # -11.02% 面積這些**已發表數字的來源**。它先前不被 lint、不進 Tier A、不進 Tier B，
+    # 唯一的檢查是閘級的 verify_cg —— 而那道檢查在 M10 之前還驗錯了 netlist。
+    # 「兩份 RTL 語意等價」先前只是一句註解；這裡把它變成零容忍的比對。
+    rcl, outl = sh("MODE=c2lp bash scripts/tier_a.sh")
+    ml = re.search(r"C2_TOTAL c2lp \w+ \d+ (\d+) (\d+)", outl)
+    lp_f = int(ml.group(1)) if ml else 0
+    lp_s = int(ml.group(2)) if ml else 0
+    run.check("M3-2 rtl_lowpower 的 C2（RTL 層）", rcl == 0 and lp_s > 0,
+              measured=f"{lp_f} frames / {lp_s} stages，0 mismatch",
+              expected="零 mismatch", tolerance="零容忍",
+              detail="與 rtl/ 同一組凍結向量、同一個 golden model 比對 "
+                     "bm/pm/survivor/解碼位元。這是 rtl_lowpower/ 第一次在 RTL 層被驗證；"
+                     "docs/lowpower_baseline.md §4.1 要求「先過 C2 才准量功耗」，"
+                     "先前只有閘級那一半（ppa/verify_cg.py），RTL 層是空的。")
+
     # ---------- M3-1 控制路徑 ----------
     #
     # C2 把資料路徑驗到 2.47 億個 stage 零 mismatch，但**所有**的 testbench 都用

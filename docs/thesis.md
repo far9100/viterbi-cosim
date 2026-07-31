@@ -325,7 +325,7 @@ C2 只比對 `bm`/`pm`/`survivor` 是不夠的:traceback 策略不同會產生�
 
 <!-- 來源: report.md §1, spec §6 -->
 
-驗證以已知答案 gate 自動化(一鍵一命令,寫入 `data/gates.csv`),共 36 筆(30 個有判準的 gate + 6 筆觀測):M0 環境 3、M1 golden 6、M2 掃描 3、M3 RTL 5、M4 浸泡 3、M5 PPA 8、M9 低功耗基準線 8。gate 的已知答案來自閉式解或效能界(如 union bound),而非事後湊出的數字(G2、G4 的判準均在量測前依 union bound 修正過,見 §6.1)。
+驗證以已知答案 gate 自動化(一鍵一命令,寫入 `data/gates.csv`),共 38 筆(32 個有判準的 gate + 6 筆觀測):M0 環境 3、M1 golden 6、M2 掃描 3、M3 RTL 7、M4 浸泡 3、M5 PPA 8、M9 低功耗基準線 8。gate 的已知答案來自閉式解或效能界(如 union bound),而非事後湊出的數字(G2、G4 的判準均在量測前依 union bound 修正過,見 §6.1)。
 
 稽核紀律:每個出現在報告裡的數字都由 `data/*.csv` 現算,`scripts/check_paper_numbers.py` 對每個被引用的數字同時驗兩件事——(a) 它等於 CSV 算出的真值;(b) 那個字串確實出現在文中(防止斷言與文件脫節)——`mismatches: 0` 才准提交。整條鏈路可由 `make repro` 冷啟動重建,除時間戳外逐位元相同。
 
@@ -604,7 +604,7 @@ d\*(3 dB 功耗,η_PA = 0.1):
 
 環境為 WSL2 Ubuntu 24.04。安裝(`setup_venv.sh` / `setup_eda.sh` / `setup_gpu.sh` / `setup_models.sh`)後,以 Makefile 逐里程碑重建:`make env / m1 / m2 / m3 / m4 / m5 / figures / report`。`make repro` 為冷啟動驗證:刪除 `data/`(含 GPU `cache_m2`)後從頭重建,`git status` 須顯示除 `meta_*.json` 外每個 CSV 與 SAIF 皆逐位元相同。每個報告數字都可由 `scripts/` 下的腳本從 `data/*.csv` 重算,`make report` 機械化此稽核(對值正確性與字串出現同時檢查)。
 
-### 附錄 D：36 筆 gate 記錄完整清單
+### 附錄 D：38 筆 gate 記錄完整清單
 
 <!-- 來源: data/gates.csv;數值見 §6 各表,此處為索引 -->
 

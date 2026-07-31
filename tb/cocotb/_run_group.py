@@ -18,11 +18,15 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, REPO)
 
-RTL = [
-    "rtl/bmu.sv", "rtl/acs_butterfly.sv", "rtl/acs_array.sv", "rtl/minpm.sv",
-    "rtl/traceback.sv", "rtl/ctrl.sv", "rtl/viterbi_top.sv",
-    "tb/dbg/viterbi_dbg.sv",
-]
+# RTL 目錄可切換。rtl_lowpower/ 是 M9 的 B0'/B1' 所合成的原始碼，也就是
+# -42.7% 功耗與 -11.02% 面積這些**已發表數字的來源**，但它先前完全不進 Tier A ——
+# 唯一的檢查是閘級的 verify_cg，而那道檢查在 M10 之前還驗錯了 netlist。
+# 兩份 RTL 宣稱語意等價（差別只有 reset 寫法：if (rst || en) 對 if (rst) / else if (en)），
+# 那是一個可以**驗證**的宣稱，不該只是註解。
+RTL_DIR = os.environ.get("FEC_RTL_DIR", "rtl")
+MODULES = ["bmu.sv", "acs_butterfly.sv", "acs_array.sv", "minpm.sv",
+           "traceback.sv", "ctrl.sv", "viterbi_top.sv"]
+RTL = [RTL_DIR + "/" + m for m in MODULES] + ["tb/dbg/viterbi_dbg.sv"]
 
 
 def main():
@@ -50,7 +54,7 @@ def main():
 
     runner.build(
         verilog_sources=[os.path.join(REPO, f) for f in RTL],
-        includes=[os.path.join(REPO, "rtl")],
+        includes=[os.path.join(REPO, RTL_DIR)],
         hdl_toplevel="viterbi_dbg",
         parameters={"Q": Q, "W": W, "D": D, "NINFO": ninfo},
         build_dir=workdir, build_args=build_args, always=True,

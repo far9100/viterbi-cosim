@@ -11,56 +11,71 @@
 # 注意：**不要把工具的輸出接到 head/tail 再用 if 判斷**。那樣 if 測到的是 head 的
 # 結束碼，不是工具的——第一版就是這樣寫的，結果 Verilator 與 Icarus 明明失敗，
 # 腳本照樣印「OK」。這正是本專案一直在防的「靜默綠燈」。
+#
+# ## 為什麼現在跑兩個目錄（2026-08-01）
+#
+# `rtl_lowpower/` 是 M9 的 B0′/B1′ 兩態所合成的 RTL —— 也就是 −42.7% 功耗與
+# −11.02% 面積這些**已發表數字所依據的原始碼**。而它先前：
+#
+#   * 不被本腳本 lint（這裡只列了 `rtl/`）
+#   * 不進 Tier A（`_run_group.py` 寫死 `rtl/`）
+#   * 不進 Tier B（`tier_b.py` 寫死 `rtl/`）
+#
+# 它唯一的檢查是閘級的 `ppa/verify_cg.py`，而那道檢查在 M10 之前還驗錯了 netlist。
+# 一份沒有經過任何前端檢查的 RTL，能不能被三個工具吃下去，全靠「它跟 rtl/ 很像」
+# 在假設。這裡把假設換成檢查。
 set -u
 cd "$HOME/fec-cosim"
 # shellcheck disable=SC1091
 source scripts/env.sh
 
-RTL="rtl/bmu.sv rtl/acs_butterfly.sv rtl/acs_array.sv rtl/minpm.sv
-     rtl/traceback.sv rtl/ctrl.sv rtl/viterbi_top.sv"
+MODULES="bmu.sv acs_butterfly.sv acs_array.sv minpm.sv traceback.sv ctrl.sv viterbi_top.sv"
+DIRS="${FEC_RTL_DIRS:-rtl rtl_lowpower}"
 FAIL=0
 mkdir -p ppa/out
 
-echo "=============================================================="
-echo " 1/3  Verilator lint"
-echo "=============================================================="
-# shellcheck disable=SC2086
-verilator --lint-only -sv -Irtl --top-module viterbi_top $RTL > /tmp/vl.log 2>&1
-RC=$?
-head -25 /tmp/vl.log
-if [ "$RC" -eq 0 ]; then echo "  Verilator: OK"; else echo "  Verilator: FAIL (rc=$RC)"; FAIL=1; fi
+for DIR in $DIRS; do
+  RTL=""
+  for m in $MODULES; do RTL="$RTL $DIR/$m"; done
 
-echo ""
-echo "=============================================================="
-echo " 2/3  Icarus (-g2012)"
-echo "=============================================================="
-# shellcheck disable=SC2086
-iverilog -g2012 -Irtl -o /tmp/iv_check.vvp -s viterbi_top $RTL > /tmp/iv.log 2>&1
-RC=$?
-head -25 /tmp/iv.log
-if [ "$RC" -eq 0 ]; then echo "  Icarus: OK"; else echo "  Icarus: FAIL (rc=$RC)"; FAIL=1; fi
+  echo "=============================================================="
+  echo " 目錄 $DIR"
+  echo "=============================================================="
 
-echo ""
-echo "=============================================================="
-echo " 3/3  Yosys 0.64（合成前端）"
-echo "=============================================================="
-cat > ppa/out/check.ys <<'YS'
-read_verilog -sv -DSYNTHESIS -I/work/rtl \
-  /work/rtl/bmu.sv /work/rtl/acs_butterfly.sv /work/rtl/acs_array.sv \
-  /work/rtl/minpm.sv /work/rtl/traceback.sv /work/rtl/ctrl.sv /work/rtl/viterbi_top.sv
-hierarchy -check -top viterbi_top
-proc
-opt -fast
-stat
-YS
-bash ppa/orfs.sh 'yosys -q -s /work/ppa/out/check.ys' > /tmp/ys.log 2>&1
-RC=$?
-grep -vE '^Warning: Replacing memory' /tmp/ys.log | tail -22
-if [ "$RC" -eq 0 ]; then echo "  Yosys: OK"; else echo "  Yosys: FAIL (rc=$RC)"; FAIL=1; fi
+  echo "-- 1/3  Verilator lint"
+  # shellcheck disable=SC2086
+  verilator --lint-only -sv -I"$DIR" --top-module viterbi_top $RTL > /tmp/vl.log 2>&1
+  RC=$?
+  head -25 /tmp/vl.log
+  if [ "$RC" -eq 0 ]; then echo "  Verilator($DIR): OK"
+  else echo "  Verilator($DIR): FAIL (rc=$RC)"; FAIL=1; fi
 
-echo ""
+  echo ""
+  echo "-- 2/3  Icarus (-g2012)"
+  # shellcheck disable=SC2086
+  iverilog -g2012 -I"$DIR" -o /tmp/iv_check.vvp -s viterbi_top $RTL > /tmp/iv.log 2>&1
+  RC=$?
+  head -25 /tmp/iv.log
+  if [ "$RC" -eq 0 ]; then echo "  Icarus($DIR): OK"
+  else echo "  Icarus($DIR): FAIL (rc=$RC)"; FAIL=1; fi
+
+  echo ""
+  echo "-- 3/3  Yosys 0.64（合成前端）"
+  {
+    printf 'read_verilog -sv -DSYNTHESIS -I/work/%s' "$DIR"
+    for m in $MODULES; do printf ' \\\n  /work/%s/%s' "$DIR" "$m"; done
+    printf '\nhierarchy -check -top viterbi_top\nproc\nopt -fast\nstat\n'
+  } > ppa/out/check.ys
+  bash ppa/orfs.sh 'yosys -q -s /work/ppa/out/check.ys' > /tmp/ys.log 2>&1
+  RC=$?
+  grep -vE '^Warning: Replacing memory' /tmp/ys.log | tail -22
+  if [ "$RC" -eq 0 ]; then echo "  Yosys($DIR): OK"
+  else echo "  Yosys($DIR): FAIL (rc=$RC)"; FAIL=1; fi
+  echo ""
+done
+
 if [ "$FAIL" -eq 0 ]; then
-  echo "三個前端全部通過。"
+  echo "所有目錄的三個前端全部通過（$DIRS）。"
 else
   echo "有前端失敗。"
 fi

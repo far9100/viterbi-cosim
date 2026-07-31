@@ -42,10 +42,10 @@ L2  定點 golden model（Q, W, D 參數化；modulo normalization）
 L3  SystemVerilog RTL → Sky130 gate-level
 ```
 
-**37 筆記錄全綠**（`data/gates.csv`）：M0 環境 3、M1 golden 6、M2 掃描 3、
-M3 RTL 6、M4 浸泡 3、M5 PPA 8、**M9 低功耗基準線 8**。
+**38 筆記錄全綠**（`data/gates.csv`）：M0 環境 3、M1 golden 6、M2 掃描 3、
+M3 RTL 7、M4 浸泡 3、M5 PPA 8、**M9 低功耗基準線 8**。
 
-其中**有 pass/fail 判準的 gate 是 31 個，另 6 筆是觀測**
+其中**有 pass/fail 判準的 gate 是 32 個，另 6 筆是觀測**
 （M5-3 功耗 vs SNR、M5-4 power gating 的重要性、M9-3 到 M9-6——
 它們的 expected 欄都自陳「觀測，不是 pass/fail」）。分開計數是刻意的：
 一個沒有判準的東西不可能「不綠」，把它混進 gate 數就是灌水。
