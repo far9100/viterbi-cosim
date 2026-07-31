@@ -24,6 +24,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from golden.ber import required_ebn0_ci  # noqa: E402
 from golden.ref_float import commsim  # noqa: E402
 from scripts.gates import REPO, Run  # noqa: E402
 from sweep.grid_runner import (CACHE, CLIPS, DS, QS, UNSAFE,  # noqa: E402
@@ -58,6 +59,25 @@ def required(rows, Q, clip, W, D):
         return None
     return metrics.ebn0_at_target_ber([r["snr_db"] for r in c],
                                       [r["ber"] for r in c], TARGET)
+
+
+def required_ci(rows, Q, clip, W, D):
+    r"""所需 Eb/N0 的 1-σ 與 95% 區間（參數化 bootstrap，見 golden/ber.py）。
+
+    這一欄是後補的。先前整條鏈路的不確定度**到 BER 表就斷了**：BER 有 cluster-robust CI，
+    但 `required_ebn0` 沒有，於是 d\*、Δd\*、C1 量化損失、winner 排序全都只剩裸點估計。
+    而實測中目標 BER=1e-5 的交叉點**永遠落在 4.0/4.5 dB 這同一個區間內** ——
+    每一個「所需 Eb/N0」都只是兩個有雜訊的 BER 點拉出來的一條弦，區間不是裝飾。
+    """
+    c = [{"ebn0_db": r["snr_db"], "ber": r["ber"],
+          "ci_low": r.get("ci_low", 0.0), "ci_high": r.get("ci_high", 0.0)}
+         for r in sorted([r for r in rows
+                          if r["Q"] == Q and r["clip"] == clip
+                          and r["W"] == W and r["D"] == D],
+                         key=lambda r: r["snr_db"])]
+    if not c:
+        return None
+    return required_ebn0_ci(c, TARGET)
 
 
 def main():
@@ -118,9 +138,16 @@ def main():
         r = required(rows, Q, clip, W, D)
         if r is None:
             continue
+        ci = required_ci(rows, Q, clip, W, D)
         grid.append({"Q": Q, "clip": clip, "W": W, "D": D,
                      "required_ebn0_db": round(r, 4),
-                     "loss_vs_float_db": round(r - REQ_FS, 4)})
+                     "loss_vs_float_db": round(r - REQ_FS, 4),
+                     "required_sigma_db": (round(ci["sigma_db"], 4)
+                                           if ci and ci["sigma_db"] else None),
+                     "required_ci_low_db": (round(ci["ci_low_db"], 4)
+                                            if ci and ci["ci_low_db"] else None),
+                     "required_ci_high_db": (round(ci["ci_high_db"], 4)
+                                             if ci and ci["ci_high_db"] else None)})
 
     n_expect = len(QS) * len(CLIPS) * len(DS)
     run.check("M2 全網格掃描", len(grid) == n_expect,
@@ -189,9 +216,15 @@ def main():
         winners.append(w)
 
     run.csv("m2_grid.csv",
-            ["Q", "clip", "W", "D", "required_ebn0_db", "loss_vs_float_db"], grid)
+            ["Q", "clip", "W", "D", "required_ebn0_db", "loss_vs_float_db",
+             "required_sigma_db", "required_ci_low_db", "required_ci_high_db"],
+            grid)
+    # winner 也帶著它的區間。這不是裝飾：四個 winner 中 Q6/D64、Q4/D64、Q6/D32 三者的
+    # required 全距只有 0.0415 dB，遠小於各自的 σ ——「BER 最佳」在統計上根本沒被解析出來。
+    # 沒有這幾欄，讀者會以為那個排序是量出來的。
     run.csv("m2_winners.csv",
             ["Q", "clip", "W", "D", "required_ebn0_db", "loss_vs_float_db",
+             "required_sigma_db", "required_ci_low_db", "required_ci_high_db",
              "survivor_bits", "rationale"], winners)
     run.csv("m2_ber_floor.csv",
             ["Q", "W", "snr_lo", "ber_lo_snr", "snr_hi", "ber_hi_snr",

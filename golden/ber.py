@@ -113,6 +113,81 @@ def ber_curve(trellis, n_info, ebn0_list, cfg, seed, **kw):
     return [measure_ber(trellis, n_info, e, cfg, seed, **kw) for e in ebn0_list]
 
 
+def _log10_sigma(ber, lo, hi):
+    """由 cluster-robust CI 反推 log10(BER) 的 1-σ。CI 是 95%，故半寬 ≈ 1.96σ。
+
+    兩個必須擋掉的邊界（低 SNR 的高 SNR 尾端真的會踩到）：
+      * `lo <= 0`：錯誤數很少時 CI 下緣會壓到 0，log10 發散。改用**單邊**（上緣）估 σ。
+      * `ber <= 0`：那個點根本沒量到錯誤，不能取 log，回 None 讓呼叫端丟棄它。
+    回 None 而不是回一個猜出來的數——靜靜回退到預設值正是 M0 那個 SAIF timescale bug 的形狀。
+    """
+    if ber <= 0:
+        return None
+    if lo > 0 and hi > lo:
+        return (np.log10(hi) - np.log10(lo)) / (2.0 * 1.96)
+    if hi > ber:
+        return (np.log10(hi) - np.log10(ber)) / 1.96
+    return None
+
+
+def required_ebn0_ci(curve, target=1e-5, n_boot=20000, seed=20260729):
+    r"""`required_ebn0` 的不確定度，以參數化 bootstrap 求得。
+
+    ## 為什麼需要這個
+
+    `required_ebn0` 是在 (Eb/N0, log10 BER) 上做**兩點對數內插**——實測中目標 BER=1e-5
+    的交叉點永遠落在 4.0/4.5 dB 這**同一個區間**內，所以每一個所報的「所需 Eb/N0」
+    其實都是兩個有雜訊的 BER 點拉出來的一條弦。而 d\*、Δd\*、C1 量化損失、winner 排序
+    全部建立在它上面。只給點估計、不給區間，讀者無從判斷 0.04 dB 的差是不是雜訊
+    ——而實測顯示那個差**確實**是雜訊（見 `data/c1_quantization_loss.csv` 的負損失）。
+
+    ## 為什麼是 bootstrap 而不是解析式的誤差傳播
+
+    解析式要對 `metrics.ebn0_at_target_ber` 的內插公式做偏微分。那等於**再實作一次**
+    那支函式，而兩份實作分岔時不會有任何錯誤訊息。bootstrap 直接呼叫同一支函式，
+    不可能與它分岔；它也自然處理「重抽之後交叉點跳到相鄰區間」這種非線性。
+
+    ## 可重生性
+
+    seed 固定且與資料無關，故同一份輸入永遠得到同一個區間（`make repro` 要求逐位元組重生）。
+
+    回傳 dict：point / sigma_db / ci_low_db / ci_high_db / n_used。
+    """
+    _, _, _, metrics = commsim()
+    pts = [(p["ebn0_db"], p["ber"],
+            _log10_sigma(p["ber"], p.get("ci_low", 0.0), p.get("ci_high", 0.0)))
+           for p in curve]
+    usable = [(e, b, s) for e, b, s in pts if s is not None and b > 0]
+    point = required_ebn0(curve, target)
+    if point is None or len(usable) < 2:
+        return {"point": point, "sigma_db": None,
+                "ci_low_db": None, "ci_high_db": None, "n_used": len(usable)}
+
+    e = np.array([x[0] for x in usable])
+    y = np.log10(np.array([x[1] for x in usable]))
+    s = np.array([x[2] for x in usable])
+
+    rng = np.random.default_rng(seed)
+    draws = y[None, :] + rng.normal(0.0, 1.0, size=(n_boot, len(y))) * s[None, :]
+    out = []
+    for row in draws:
+        r = metrics.ebn0_at_target_ber(e.tolist(), np.power(10.0, row).tolist(),
+                                       target)
+        if r is not None and np.isfinite(r):
+            out.append(r)
+    if len(out) < n_boot // 10:
+        # 過半重抽算不出交叉點 ⇒ 這條曲線太短或太吵，不要硬給一個看起來合理的區間
+        return {"point": point, "sigma_db": None,
+                "ci_low_db": None, "ci_high_db": None, "n_used": len(usable)}
+
+    out = np.array(out)
+    return {"point": point,
+            "sigma_db": float(out.std(ddof=1)),
+            "ci_low_db": float(np.percentile(out, 2.5)),
+            "ci_high_db": float(np.percentile(out, 97.5)),
+            "n_used": len(usable)}
+
+
 def required_ebn0(curve, target=1e-5):
     """由 BER 曲線內插出達到 target BER 所需的 Eb/N0。用既有模擬器的同一支函式。"""
     _, _, _, metrics = commsim()

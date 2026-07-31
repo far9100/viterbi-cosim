@@ -1,9 +1,9 @@
 {
-  "start_timestamp": "2026-07-15T01:03:32+0800",
+  "start_timestamp": "2026-07-29T10:49:58+0800",
   "argv": [
     "scripts/m5_gate.py"
   ],
-  "git_commit": "49c2d36a5f185753bab01438e311478d9ec9d12d",
+  "git_commit": "78c71acbe5b4bc30d2bdffa1b9d957fe30bc3f85",
   "git_dirty": true,
   "python": "3.12.3",
   "numpy": "2.4.4",
