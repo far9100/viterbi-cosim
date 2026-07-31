@@ -32,7 +32,10 @@ from scripts.gates import DATA, REPO  # noqa: E402
 # 時間預算：harness 有 10 分鐘上限，而 32 個閘級點要跑數小時。
 # 用光就乾淨結束並回傳 1，由 Makefile 的 until 迴圈續跑——比照 ppa/run_power.py。
 # point() 有快取，續跑時已算過的點瞬間返回；最後一趟全命中才寫出完整的 power_m9.json。
-BUDGET_S = 460
+#
+# 從環境變數讀（比照 sweep/grid_runner.py），這樣續跑這條路徑可以用一個很小的預算
+# 便宜地測試，而不必等完整的數小時掃描——否則它只會在真正的冷跑裡第一次被執行到。
+BUDGET_S = float(os.environ.get("BUDGET", "460"))
 
 LP_RTL = "/work/rtl_lowpower"
 

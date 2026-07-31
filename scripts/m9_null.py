@@ -50,7 +50,8 @@ SXX = 10.0                             # Σ(x−x̄)² for x = 1,2,3,4,5
 # 16 個閘級點，每點 2–4 分鐘。用光預算就乾淨結束並回傳 1，由 until 迴圈續跑
 # （比照 ppa/run_power.py 與 scripts/m9_sweep.py）。**半份 null 分布不寫檔**：
 # 少幾個 seed 的 σ_null 照樣算得出數字，而那個數字會被當成雜訊地板用掉。
-BUDGET_S = 460
+# 從環境變數讀，理由同 m9_sweep.py：續跑路徑要能用小預算便宜地測試。
+BUDGET_S = float(os.environ.get("BUDGET", "460"))
 
 
 def main():

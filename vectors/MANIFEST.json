@@ -1,15 +1,15 @@
 {
   "metadata": {
-    "start_timestamp": "2026-07-14T10:57:44+0800",
+    "start_timestamp": "2026-07-31T11:53:32+0800",
     "argv": [
       "scripts/freeze_vectors.py"
     ],
-    "git_commit": "6b960129f1fd4b589b3e1cc713ebf8190aee560d",
+    "git_commit": "c390e574cae8c2cb98a623d760c5874dc8614c72",
     "git_dirty": true,
     "python": "3.12.3",
     "numpy": "2.4.4",
-    "verilator": "absent",
-    "iverilog": "absent",
+    "verilator": "Verilator 5.051 devel rev v5.050-59-gdde8de0a0 (mod)",
+    "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-286-g15689210c-dirty)",
     "run": "freeze_vectors"
   },
   "n_info": 256,

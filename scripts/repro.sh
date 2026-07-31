@@ -121,10 +121,50 @@ for e in "${TIMES[@]}"; do
 done
 
 # ---------------------------------------------------------------- 驗收
-banner "4. 驗收：git status 必須只剩 data/meta_*.json"
+banner "4. 驗收：git status 必須只剩 data/meta_*.json 與 vectors/MANIFEST.json 的 metadata"
 
 # figures/ 與 ppa/out/ 是 gitignore 掉的，不列入比對（它們本來就不是證據）。
 DIFF=$(git status --porcelain -- data | awk '{print $2}')
+
+# **判準原本只看 data/ —— 那是一個盲點。**
+#
+# `make freeze` 會重寫 `vectors/MANIFEST.json`，而它在 data/ 之外，
+# 所以每一次冷跑都會默默改動這個**凍結的**測試向量清單而沒有任何人看見；
+# `m7-repro`（2026-07-17）的宣稱也繼承了這個盲點。
+#
+# 但這個檔不能整份豁免：它裝著 46 個向量的 92 個 SHA-256（input / expected 各一），
+# 那正是凍結的本體。
+# 會變的只有 `metadata` 區塊（start_timestamp / git_commit / 工具版本），
+# 與 data/meta_*.json 同性質。所以判準是「**除了 metadata 以外逐位元組相同**」——
+# 精確地豁免該豁免的，不放寬該守的。
+banner "4a. 凍結的測試向量清單：metadata 以外必須逐位元組相同"
+if [ -n "$(git status --porcelain -- vectors)" ]; then
+  if git show HEAD:vectors/MANIFEST.json > /tmp/mf_old.json 2>/dev/null &&
+     python3 -c "
+import json, sys
+old = json.load(open('/tmp/mf_old.json'))
+new = json.load(open('vectors/MANIFEST.json'))
+old.pop('metadata', None); new.pop('metadata', None)
+sys.exit(0 if old == new else 1)
+"; then
+    echo "  OK：46 個向量的 92 個 SHA-256 與其餘欄位完全相同，只有 metadata 變動"
+    git status --short -- vectors | sed 's/^/  /'
+  else
+    echo "**凍結的測試向量清單在 metadata 以外也變了 —— 這是嚴重發現。**"
+    git diff -- vectors/MANIFEST.json | head -40
+    echo "（備份仍在 $BAK）"
+    exit 1
+  fi
+  # vectors/ 底下除了 MANIFEST.json 以外的任何差異都是失敗（.npz 必須逐位元組重生）。
+  OTHER=$(git status --porcelain -- vectors | awk '{print $2}' | grep -v '^vectors/MANIFEST.json$' || true)
+  if [ -n "$OTHER" ]; then
+    echo "**vectors/ 底下有 MANIFEST.json 以外的差異：**"
+    echo "$OTHER" | sed 's/^/  /'
+    exit 1
+  fi
+else
+  echo "  OK：vectors/ 完全沒有差異"
+fi
 
 UNEXPECTED=""
 for f in $DIFF; do

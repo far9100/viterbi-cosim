@@ -30,9 +30,13 @@ from scripts.gates import REPO  # noqa: E402
 OUT = os.path.join(REPO, "ppa", "out", "power")
 
 
-def check(Q, W, D, clip, snr=3.0, frames=1, cg=False):
-    """建置並跑 gate-level 功能檢查。回傳 (通過?, 比對的位元數, 摘要)。"""
-    tag = f"Q{Q}_W{W}_D{D}" + ("_cg" if cg else "")
+def check(Q, W, D, clip, snr=3.0, frames=1, variant=""):
+    """建置並跑 gate-level 功能檢查。回傳 (通過?, 比對的位元數, 摘要)。
+
+    variant 是 tag 後綴，必須與 `scripts/m9_sweep.py` 的 `VARIANTS` 一致：
+    `_rtlv` = B0′（`rtl_lowpower/`，無 clock gating）、`_cg_rtlv` = B1′（再加 clock gating）。
+    """
+    tag = f"Q{Q}_W{W}_D{D}{variant}"
     netlist = os.path.join(REPO, "ppa", "out", "synth", f"net_{tag}.v")
     if not os.path.exists(netlist):
         return False, 0, f"netlist 不存在：{netlist}"
@@ -60,14 +64,37 @@ def check(Q, W, D, clip, snr=3.0, frames=1, cg=False):
 
 
 if __name__ == "__main__":
-    CONFIGS = [(3, 8, 32, 2.0), (6, 12, 32, 3.0),
-               (4, 10, 64, 2.5), (6, 12, 64, 3.0)]
+    # **驗的必須是 M9 真正拿去量功耗的那批 netlist。**
+    #
+    # 原本這裡寫死 `cg=True`，組出的 tag 是 `Q{Q}_W{W}_D{D}_cg` —— 那是由 `rtl/`
+    # 合成、M9 開發早期留下的一批 netlist。而 M9 發表的 −42.7% 功耗與 −11.02% 面積
+    # 是在 `rtl_lowpower/` 合成的 `_rtlv` / `_cg_rtlv` 上量的（見 m9_sweep.VARIANTS）。
+    # 也就是說：**已發表的功耗宣稱所依據的 netlist，從來沒有被這道 C2 驗過**，
+    # 而這道 C2 正是 `docs/lowpower_baseline.md` §4.1 用來擋住「功能壞掉但功耗數字漂亮」
+    # 的唯一防線。
+    #
+    # 在熱樹上這個錯誤是隱形的：`net_*_cg.v` 剛好還留在 ppa/out/ 裡，於是它驗了
+    # 一批無關的 netlist 然後回報全部通過。是 2026-07-31 的完整冷跑把它逼出來的
+    # ——`ppa/out/` 被刪光之後沒有任何步驟會重建 `_cg`，於是 4 個組態全部
+    # 「netlist 不存在」。這正是冷跑該做的事。
+    #
+    # 兩個變體都驗：B0′ 是 RTL 改寫（語意應等價），B1′ 再加 clock gating。
+    # 兩者都在量功耗之前必須先過 C2。
+    from scripts.m9_sweep import MAIN, OTHERS, VARIANTS, ensure_netlists
+
+    # netlist 必須先存在。合成本身是冪等的（檔案在就跳過），所以放在這裡
+    # 既滿足「先合成、再 C2、才量功耗」的順序，也不會讓熱樹重跑合成。
+    ensure_netlists()
+
     rc = 0
-    for Q, W, D, clip in CONFIGS:
-        ok, n, info = check(Q, W, D, clip, cg=True)
-        status = "PASS" if ok else "FAIL"
-        print(f"  [{status}] Q{Q}_W{W}_D{D}_cg  比對 {n} 個解碼位元  {info}", flush=True)
-        if not ok:
-            rc = 1
-    print("\nclock-gated netlist 的 C2：" + ("全部通過" if rc == 0 else "**有失敗，不得量功耗**"))
+    for Q, W, D, clip in [MAIN] + OTHERS:
+        for variant, _cg in VARIANTS:
+            ok, n, info = check(Q, W, D, clip, variant=variant)
+            status = "PASS" if ok else "FAIL"
+            print(f"  [{status}] Q{Q}_W{W}_D{D}{variant}  "
+                  f"比對 {n} 個解碼位元  {info}", flush=True)
+            if not ok:
+                rc = 1
+    print("\nrtl_lowpower netlist 的 C2："
+          + ("全部通過" if rc == 0 else "**有失敗，不得量功耗**"))
     sys.exit(rc)

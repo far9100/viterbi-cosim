@@ -130,9 +130,14 @@ fmax:
 # ---------------------------------------------------------------- 交付
 # ---------------------------------------------------------------- M9：低功耗基準線
 #
-# 順序不可顛倒（docs/lowpower_baseline.md §4.1）：**先過 C2，才准量功耗**。
+# 順序不可顛倒（docs/lowpower_baseline.md §4.1）：**先合成、再過 C2，才准量功耗**。
 # clock gating 的第一版正是死在 C2 —— ICG 關掉時脈時同步 reset 進不去，
 # 而症狀偽裝成「收到 0 個輸出」，功耗流程照樣會產出漂亮的數字。
+#
+# verify_cg.py 自己會先確保 8 個 netlist（4 組態 × B0′/B1′ 兩變體）存在再驗。
+# 合成放在這裡而不是放在 m9-sweep 裡，是因為 C2 必須發生在**合成之後、量功耗之前**；
+# 原本合成藏在 m9_sweep.ensure_netlists() 裡，於是冷跑時 m9-verify 先跑、
+# 一個 netlist 都還不存在，整道 gate 直接失敗。
 m9-verify:
 	@$(ENV) $(PY) ppa/verify_cg.py
 
@@ -140,14 +145,14 @@ m9-verify:
 # 快取已落地，重複呼叫即可接著跑——與 m2 / m5 同一個 until 樣板。
 m9-sweep: m9-verify
 	@$(ENV) i=0; \
-	  until $(PY) scripts/m9_sweep.py; do \
+	  until BUDGET=$(BUDGET) $(PY) scripts/m9_sweep.py; do \
 	    i=$$((i+1)); \
 	    if [ $$i -ge $(GUARD) ]; then echo "**m9_sweep 續跑超過 $(GUARD) 輪，中止**"; exit 1; fi; \
 	  done
 
 m9-null:
 	@$(ENV) i=0; \
-	  until $(PY) scripts/m9_null.py; do \
+	  until BUDGET=$(BUDGET) $(PY) scripts/m9_null.py; do \
 	    i=$$((i+1)); \
 	    if [ $$i -ge $(GUARD) ]; then echo "**m9_null 續跑超過 $(GUARD) 輪，中止**"; exit 1; fi; \
 	  done
