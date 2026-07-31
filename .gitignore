@@ -31,6 +31,12 @@ results.xml
 # 18 MB 換「功耗數字的原始證據可被任何人重新驗算」是划算的，所以承諾照樣兌現，
 # 只是改成壓縮存放（scripts/saif_archive.sh，附未壓縮檔的 SHA-256 manifest）。
 # ppa/saif_toggle.py 兩種都吃。
+#
+# 2026-07-31：M9 的 32 個點（`_rtlv` / `_cg_rtlv` 兩個變體，含 8 個 seed 的 null 分布）
+# 依同一個裁決一併歸檔——1114 MB -> 43 MB（26.1x），寫進獨立的 MANIFEST_m9.sha256。
+# 不歸檔的話，M9 的 −42.7%、分區塊佔比與 σ_null 在 repo 內就沒有可重新驗算的原始證據，
+# 而那正是 M5 當初決定付這筆空間的理由；同一個理由對 M9 一樣成立。
+# 追蹤內容因此從約 27 MB 變成約 69 MB。
 data/saif/*.saif
 !data/saif/*.saif.gz
 

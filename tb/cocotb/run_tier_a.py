@@ -86,12 +86,27 @@ def main():
     print(f"=== Tier A  MODE={mode}  SIM={sim}  ({len(g)} 組)")
     sys.stdout.flush()
 
+    # **g6neg 不吃 pass-marker。**
+    #
+    # marker 只存 (frames, stages) 兩個數字，命中時直接 continue —— 於是那一組的
+    # 「G6 觸發（stage N, spread A > B）」證據行**根本不會被印出來**。
+    # 而 `scripts/m3_gate.py` 的 G6 負向 gate 正是 grep 這些證據行來裁決的
+    # （`len(fires) == 4`），所以只要 g6neg 的 marker 存在，這道 gate 就必然
+    # 判成 0/4 失敗 —— `make m3` 與 `make gates` 在**熱樹上永遠過不了**，
+    # 只有冷跑（repro.sh 會刪掉 tb/cocotb/build）才會綠。
+    #
+    # 這個不對稱本身是有價值的：`2026-07-16` 的第一次冷跑就是靠「g6neg 要求新鮮的
+    # 違規證據，而 c2 信任聚合計數器」才抓到 stale marker 讓 M3 假性通過。
+    # 所以修法不是讓 marker 去存證據（那會毀掉這個不對稱），而是**不要快取 g6neg**：
+    # 它只有 4 組、實測重跑 1.6 秒，用 1.6 秒換一道 gate 的全部證據，是划算的。
+    use_marks = mode != "g6neg"
+
     total_frames = total_stages = 0
     n_done = 0
     for (Q, W, D), names in sorted(g.items()):
         tag = f"{mode}_{sim}_Q{Q}_W{W}_D{D}"
         mark = os.path.join(MARKS, tag)
-        if os.path.exists(mark):
+        if use_marks and os.path.exists(mark):
             with open(mark) as f:
                 fr, st = (int(x) for x in f.read().split())
             total_frames += fr
@@ -145,8 +160,9 @@ def main():
             print(f"\n--- 模擬器輸出（末 30 行）---\n{tail}")
             return 1
 
-        with open(mark, "w") as f:
-            f.write(f"{fr} {st}")
+        if use_marks:
+            with open(mark, "w") as f:
+                f.write(f"{fr} {st}")
         total_frames += fr
         total_stages += st
         n_done += 1

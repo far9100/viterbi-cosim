@@ -43,6 +43,7 @@ help:
 	@echo "    make m3        M3：RTL + Tier A（C2 / G6 正反向 / G7）"
 	@echo "    make m4        M4：Tier B 浸泡（2.47 億個 stage）"
 	@echo "    make m5        M5：合成 -> gate-level -> SAIF -> OpenSTA -> d*（~50 分，可續跑）"
+	@echo "    make m9        M9：低功耗基準線 B0/B0'/B1'（先過 C2 才量功耗，~2.5 小時，可續跑）"
 	@echo ""
 	@echo "  交付："
 	@echo "    make figures   重生所有圖表"
@@ -50,10 +51,14 @@ help:
 	@echo "    make mutate    變異測試：檢查器必須抓得到錯（6/6）"
 	@echo ""
 	@echo "  整條鏈路："
-	@echo "    make all       env -> m1 -> m2 -> m3 -> m4 -> m5 -> figures -> report"
+	@echo "    make all       env -> m1 -> m2 -> m3 -> m4 -> m5 -> m9 -> figures -> report"
 	@echo "    make repro     **冷跑**：刪光 data/ 從零重生，git status 必須只剩 meta_*.json"
 	@echo ""
 	@echo "  別名：sweep=m2  ber=m4  ppa=m5"
+	@echo ""
+	@echo "  可續跑的 target（m2 / m5 / m9）吃兩個變數："
+	@echo "    BUDGET=$(BUDGET)   單趟的秒數預算，用盡就落快取、乾淨結束"
+	@echo "    GUARD=$(GUARD)     續跑輪數上限（保險絲，避免真正的失敗變成無窮迴圈）"
 	@echo ""
 	@echo "里程碑結束時跑該里程碑的 gate，全綠才進下一階段（CLAUDE.md §4.2）。"
 
@@ -116,7 +121,7 @@ m5:
 	@$(ENV) $(PY) ppa/sta.py
 	@$(ENV) $(PY) ppa/saif_toggle.py
 	@$(ENV) $(PY) scripts/diag_mechanism.py
-	@bash scripts/saif_archive.sh
+	@bash scripts/saif_archive.sh m5
 	@$(ENV) $(PY) scripts/m5_gate.py
 ppa: m5
 fmax:
@@ -131,13 +136,24 @@ fmax:
 m9-verify:
 	@$(ENV) $(PY) ppa/verify_cg.py
 
+# m9_sweep（32 個閘級點）與 m9_null（16 個）都會在預算用盡時乾淨結束並回傳 1，
+# 快取已落地，重複呼叫即可接著跑——與 m2 / m5 同一個 until 樣板。
 m9-sweep: m9-verify
-	@$(ENV) $(PY) scripts/m9_sweep.py
+	@$(ENV) i=0; \
+	  until $(PY) scripts/m9_sweep.py; do \
+	    i=$$((i+1)); \
+	    if [ $$i -ge $(GUARD) ]; then echo "**m9_sweep 續跑超過 $(GUARD) 輪，中止**"; exit 1; fi; \
+	  done
 
 m9-null:
-	@$(ENV) $(PY) scripts/m9_null.py
+	@$(ENV) i=0; \
+	  until $(PY) scripts/m9_null.py; do \
+	    i=$$((i+1)); \
+	    if [ $$i -ge $(GUARD) ]; then echo "**m9_null 續跑超過 $(GUARD) 輪，中止**"; exit 1; fi; \
+	  done
 
 m9: m9-sweep m9-null
+	@bash scripts/saif_archive.sh m9
 	@$(ENV) $(PY) scripts/m9_gate.py
 
 figures:
@@ -148,13 +164,19 @@ figures:
 	@$(ENV) $(PY) scripts/plot_m9.py
 
 # 所有已上線的 known-answer 閘門 -> data/gates.csv
-# （第一版漏掉 m4 與 m5 —— 那正是這份 Makefile 之前在說謊的一部分）
+#
+# 第一版漏掉 m4 與 m5——那正是這份 Makefile 之前在說謊的一部分。
+# 第二版漏掉 m0 與 m9：`gates.py` 的 finalize() 是**以 milestone 為單位整批取代**，
+# 所以沒被列進來的里程碑，它的列只會沿用檔案裡的舊值、永遠不會被重新驗證。
+# gates.csv 有 36 列，而這個「跑全部 gate」的入口當時只涵蓋其中 25 列。
 gates:
+	@$(ENV) $(PY) scripts/m0_gate.py
 	@$(ENV) $(PY) scripts/m1_gate.py
 	@$(ENV) $(PY) scripts/m2_gate.py
 	@$(ENV) $(PY) scripts/m3_gate.py
 	@$(ENV) $(PY) scripts/m4_gate.py
 	@$(ENV) $(PY) scripts/m5_gate.py
+	@$(ENV) $(PY) scripts/m9_gate.py
 
 report:
 	@$(ENV) $(PY) scripts/check_paper_numbers.py
@@ -163,7 +185,9 @@ report:
 mutate:
 	@bash scripts/mutate_check.sh
 
-all: env m1 freeze m2 m3 m4 m5 figures report mutate
+# m9 必須排在 figures 之前：plot_m9.py 讀 data/power_m9.json 與 data/power_m9_null.json，
+# 而冷跑會把 data/ 刪光。M9 不在鏈路裡的話，`make figures` 就會在冷跑中途 FileNotFoundError。
+all: env m1 freeze m2 m3 m4 m5 m9 figures report mutate
 	@echo ""
 	@echo "整條鏈路完成。"
 

@@ -24,9 +24,15 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ppa.power as P  # noqa: E402
-from ppa.run_power import DUMP_DEPTH, FRAMES, SNR_SWEEP, point  # noqa: E402
+from ppa.run_power import (DUMP_DEPTH, FRAMES, SNR_SWEEP,  # noqa: E402
+                           evidence_only, point)
 from ppa.synth import synth  # noqa: E402
 from scripts.gates import DATA, REPO  # noqa: E402
+
+# 時間預算：harness 有 10 分鐘上限，而 32 個閘級點要跑數小時。
+# 用光就乾淨結束並回傳 1，由 Makefile 的 until 迴圈續跑——比照 ppa/run_power.py。
+# point() 有快取，續跑時已算過的點瞬間返回；最後一趟全命中才寫出完整的 power_m9.json。
+BUDGET_S = 460
 
 LP_RTL = "/work/rtl_lowpower"
 
@@ -56,6 +62,8 @@ def ensure_netlists():
 
 
 def main():
+    t_start = time.time()
+
     print("=== M9：先確保兩個變體的 netlist 都在")
     ensure_netlists()
 
@@ -63,6 +71,9 @@ def main():
     print(f"\n=== 主掃描 Q{MAIN[0]}_W{MAIN[1]}_D{MAIN[2]}：SNR {SNR_SWEEP}")
     for suffix, _cg in VARIANTS:
         for snr in SNR_SWEEP:
+            if time.time() - t_start > BUDGET_S:
+                print("時間預算用盡，乾淨結束。再跑一次即可續做。")
+                return 1
             Q, W, D, clip = MAIN
             t0 = time.time()
             r = point(Q, W, D, clip, snr, variant=suffix)
@@ -78,15 +89,25 @@ def main():
     print("\n=== 其餘三個組態（只量 3 dB）")
     for suffix, _cg in VARIANTS:
         for Q, W, D, clip in OTHERS:
+            if time.time() - t_start > BUDGET_S:
+                print("時間預算用盡，乾淨結束。再跑一次即可續做。")
+                return 1
             r = point(Q, W, D, clip, 3.0, variant=suffix)
             r["variant"] = suffix
             rows.append(r)
             print(f"  {r['tag']:22s} P={r.get('p_total_w', 0) * 1e3:7.3f} mW",
                   flush=True)
 
+    # 列序由上面兩段的常數迴圈（VARIANTS × SNR_SWEEP、VARIANTS × OTHERS）唯一決定，
+    # 與快取命中與否無關，所以不需要再排序一次。**檔案只在完整跑完一趟時才寫**——
+    # 預算用盡是 return 1，不是寫出半份 power_m9.json。
+    #
+    # evidence_only 剝掉 sim_s / wall_s：它們是 wall-clock 遙測，每次都會變。
+    # 原本這裡是直接 json.dump(rows)，沒有沿用 run_power.py 的剝除函式，
+    # 於是 git 追蹤的證據檔帶著計時欄位進庫——這與 `2026-07-16-06` 修掉的是同一個病。
     out = os.path.join(DATA, "power_m9.json")
     with open(out, "w") as f:
-        json.dump({"points": rows}, f, indent=2)
+        json.dump({"points": [evidence_only(r) for r in rows]}, f, indent=2)
     print(f"\n-> {out}（{len(rows)} 點）")
     return 0
 

@@ -17,8 +17,9 @@
 #     刪光 -> 重生 -> git status
 #     必須**只剩 data/meta_*.json 有差異**（它們記 start_timestamp 與 wall time，本來就會變）
 #
-# 其餘每一個檔案——gates.csv、results_m*.csv、saif/*.saif.gz、saif/MANIFEST.sha256、
-# tierb_manifests/*.json——**必須逐位元組相同**。
+# 其餘每一個檔案——gates.csv、results_m*.csv、power*.json、saif/*.saif.gz、
+# saif/MANIFEST.sha256、saif/MANIFEST_m9.sha256、tierb_manifests/*.json
+# ——**必須逐位元組相同**。
 #
 # 任何一個檔案沒能逐位元組重生，就是一個**真實發現**，要追查並如實記錄，
 # 不得把判準放寬。
@@ -34,7 +35,6 @@ REPO="$(pwd)"
 source scripts/env.sh
 
 BAK="${REPRO_BAK:-/tmp/fec-repro-backup.tar}"
-LOG="data/repro.log"
 
 banner() { echo; echo "############ $* ############"; echo; }
 
@@ -76,6 +76,11 @@ echo "  ..."
 banner "3. 從零重生（這是重點；耗時 2-4 小時）"
 t0=$(date +%s)
 
+# 每一步的耗時累積起來，最後印一張表。冷跑要好幾個小時，而各步驟的成本
+# 是排程與取捨的依據（例如「M9 值不值得留在鏈路裡」）——把它記下來，
+# 而不是讓它只存在於捲過去的終端機輸出裡。
+TIMES=()
+
 step() {
   local name="$1"; shift
   local ts=$(date +%s)
@@ -86,7 +91,9 @@ step() {
     echo "還原：  cd $REPO && tar xf $BAK && git checkout -- data/"
     exit 1
   fi
-  echo "--- [$name] 完成（$(( $(date +%s) - ts )) 秒）"
+  local dt=$(( $(date +%s) - ts ))
+  TIMES+=("$name $dt")
+  echo "--- [$name] 完成（$dt 秒）"
 }
 
 step "M0 env"    make env
@@ -96,12 +103,22 @@ step "M2 sweep"  make m2
 step "M3 rtl"    make m3
 step "M4 tierb"  make m4
 step "M5 ppa"    make m5
+# M9 必須在 figures 之前。它在 2026-07-29/30 完成，但沒有被加進這串步驟，
+# 而第 2 步會把 data/ 刪光——於是 `make figures` 的 plot_m9.py 找不到 power_m9.json，
+# 冷跑在這裡直接 FileNotFoundError；就算跳過圖，check_paper_numbers.py 斷言
+# gates.csv 有 36 列，少了 M9 的 8 列也只會有 28 列。
+# 也就是說：M7（tag `m7-repro`）坐實的那個「一鍵冷跑」宣稱，從 M9 落地那天起就是假的。
+step "M9 lowpow" make m9
 step "figures"   make figures
 step "report"    make report
 step "mutate"    make mutate
 
 echo
-echo "重生完成，共 $(( ($(date +%s) - t0) / 60 )) 分。"
+echo "重生完成，共 $(( ($(date +%s) - t0) / 60 )) 分。各步驟耗時："
+for e in "${TIMES[@]}"; do
+  set -- $e
+  printf "  %-10s %6d 秒\n" "$1" "$2"
+done
 
 # ---------------------------------------------------------------- 驗收
 banner "4. 驗收：git status 必須只剩 data/meta_*.json"
@@ -113,7 +130,8 @@ UNEXPECTED=""
 for f in $DIFF; do
   case "$f" in
     data/meta_*.json)  ;;                       # 預期會變：時間戳 + wall time
-    data/repro.log)    ;;                       # 本檔自己的 log
+    # 這裡原本還豁免 data/repro.log —— 但那個檔從來沒有被寫出來過（LOG 變數宣告了沒用）。
+    # 一個不存在的檔案的豁免只是把判準悄悄放寬一格，刪掉。
     *) UNEXPECTED="$UNEXPECTED $f" ;;
   esac
 done
@@ -139,15 +157,21 @@ if [ -n "$UNEXPECTED" ]; then
   exit 1
 fi
 
+# gate 數從 gates.csv 現算，不寫死。
+# 這一行原本硬寫「26 個 gate」，而實際是 36——它是冷跑路徑上唯一沒有任何檢查器
+# 盯著的數字，所以它腐化了兩次（gate 改名 26->27，再加上 M9 的 8 列）都沒被發現。
+# 現算的成本是一行 awk，而寫死的成本是一個會說謊的成功橫幅。
+N_GATES=$(awk 'NR>1' data/gates.csv | wc -l)
+
 echo "=================================================================="
 echo " 冷跑驗證**通過**。"
 echo ""
 echo " 刪光 data/ 從零重生之後，除了 data/meta_*.json（時間戳與 wall time，"
 echo " 本來就會變）以外，**每一個檔案都逐位元組相同**："
-echo "   - data/gates.csv          （26 個 gate）"
+echo "   - data/gates.csv          （$N_GATES 筆 gate 記錄）"
 echo "   - data/results_m*.csv     （報告數字的唯一來源）"
-echo "   - data/saif/*.saif.gz     （功耗證據）"
-echo "   - data/saif/MANIFEST.sha256"
+echo "   - data/saif/*.saif.gz     （功耗證據：M5 的 10 個點 + M9 的 32 個點）"
+echo "   - data/saif/MANIFEST.sha256 / MANIFEST_m9.sha256"
 echo "   - data/tierb_manifests/*.json"
 echo ""
 echo " 規格書 §8 的「從零重生」宣稱，第一次成為一個被實測驗證過的事實。"

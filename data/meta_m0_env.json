@@ -1,9 +1,9 @@
 {
-  "start_timestamp": "2026-07-14T02:31:22+0800",
+  "start_timestamp": "2026-07-31T11:33:00+0800",
   "argv": [
     "scripts/m0_gate.py"
   ],
-  "git_commit": "ae9e151d8c33f73a70ea3e4965474c3c373a22ed",
+  "git_commit": "c3629f9f6cf76d839db3e9a11b67d333d5ebae1a",
   "git_dirty": true,
   "python": "3.12.3",
   "numpy": "2.4.4",

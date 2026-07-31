@@ -47,8 +47,14 @@ SEEDS = [20260801, 20260802, 20260803, 20260804,
 VARIANTS = ["_rtlv", "_cg_rtlv"]      # B0′ 控制組 / B1′ 最佳化
 SXX = 10.0                             # Σ(x−x̄)² for x = 1,2,3,4,5
 
+# 16 個閘級點，每點 2–4 分鐘。用光預算就乾淨結束並回傳 1，由 until 迴圈續跑
+# （比照 ppa/run_power.py 與 scripts/m9_sweep.py）。**半份 null 分布不寫檔**：
+# 少幾個 seed 的 σ_null 照樣算得出數字，而那個數字會被當成雜訊地板用掉。
+BUDGET_S = 460
+
 
 def main():
+    t_start = time.time()
     Q, W, D, clip = CONFIG
     out = {}
     for var in VARIANTS:
@@ -56,6 +62,9 @@ def main():
         print(f"\n=== null 分布：Q{Q}_W{W}_D{D}{var} @ {SNR_FIXED} dB，"
               f"{len(SEEDS)} 個獨立 seed")
         for sd in SEEDS:
+            if time.time() - t_start > BUDGET_S:
+                print("時間預算用盡，乾淨結束。再跑一次即可續做。")
+                return 1
             t0 = time.time()
             r = point(Q, W, D, clip, SNR_FIXED, variant=var, seed=sd)
             rows.append(r)

@@ -30,8 +30,14 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 
+# FEC_REPORT_PATH：讓 scripts/mutate_check.sh 把檢查器指向 report.md 的**副本**。
+# 變異測試要在文件裡注入已知錯誤、確認檢查器抓得到；原本的做法是 `sed -i` 直接改
+# git 追蹤中的 docs/report.md，再靠 trap EXIT + /tmp 備份還原——而它是 `make all`
+# 與 `make repro` 的最後一步，中途被砍就會留下一份被改壞的追蹤檔。
+# 對副本操作之後，變異測試再也不可能損毀真的文件。
 DOCS = {
-    "report": os.path.join(ROOT, "docs", "report.md"),
+    "report": os.environ.get("FEC_REPORT_PATH")
+              or os.path.join(ROOT, "docs", "report.md"),
     "falsif": os.path.join(ROOT, "docs", "falsification.md"),
     "spec": os.path.join(ROOT, "docs", "fec_viterbi_cosim_spec.md"),
     # README 是專案門面。它曾經**停在 M3+M4 整整兩個里程碑**都沒人發現——
@@ -562,9 +568,22 @@ if _dups:
 _red = [g["gate"] for g in GATES if g["passed"] != "True"]
 if _red:
     fails.append(f"[gates:red] gates.csv 有未通過的 gate：{_red}")
-for _ms in ("M0", "M1", "M2", "M3", "M4", "M5"):
-    if not any(g["milestone"] == _ms for g in GATES):
+# 明列所有**應該**出現在 gates.csv 裡的里程碑，兩個方向都檢查。
+#
+# 這份清單原本是 M0..M5，M9 落地之後沒有跟著加——於是「gates.csv 缺了 M9」
+# 只能靠 §1 的總數 36 間接抓到，而總數是很鈍的判準：少了 M9 的 8 列、
+# 同時多出 8 列別的東西，它就完全看不見。
+# 反向檢查（出現了不在清單裡的里程碑）則是為了讓下一個里程碑落地時
+# **必須**回來改這一行，而不是靜靜地被總數吸收掉。
+_EXPECT_MS = ("M0", "M1", "M2", "M3", "M4", "M5", "M9")
+_seen_ms = {g["milestone"] for g in GATES}
+for _ms in _EXPECT_MS:
+    if _ms not in _seen_ms:
         fails.append(f"[gates:missing] gates.csv 缺少里程碑 {_ms}")
+_extra_ms = sorted(_seen_ms - set(_EXPECT_MS))
+if _extra_ms:
+    fails.append(f"[gates:unexpected] gates.csv 出現未登記的里程碑 {_extra_ms}"
+                 f" —— 新里程碑要同時更新 _EXPECT_MS 與 §1 的總數斷言")
 
 # ---- §3 已撤回主張的字面回歸防護 ----
 # 這些是**實測後被推翻**的說法。它們曾經寫在文件裡；R3 防止它們悄悄復活。

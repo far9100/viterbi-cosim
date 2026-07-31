@@ -34,6 +34,28 @@ CONFIGS = [
 ]
 
 
+def evidence_only(r):
+    """把一列量測結果剝成「可進 git 追蹤的證據檔」的形狀。
+
+    剝兩類東西，理由不同：
+
+    1. `sim_s` / `wall_s` 是 wall-clock 遙測，每次都會變，不是科學結果。留著的話
+       `power.json` 永遠無法逐位元組重生。功耗數值 `p_*_w` 才是證據，run 層級的計時另有記錄。
+       （這是 `2026-07-16-06` 修過的病。）
+
+    2. `seed` 為 `None` 時**整個鍵拿掉**，而不是寫成 `"seed": null`。
+       `seed` 是 M9 期間才加進 `point()` 的欄位，用來跑同一個 SNR 的獨立重複；
+       M5 的主掃描不帶 seed，而 `data/power.json` 是 2026-07-17 產出並提交的，
+       裡面根本沒有這個鍵。若照寫 `null`，熱跑會因 `data/cache_m5/` 命中而看不出來，
+       **冷跑則必然多出一個鍵、逐位元組判準必敗**——一個只在刪光重生時才現形的差異。
+       `seed` 有值時（M9 的 null 分布）它是重現該點所必需的，照樣入檔。
+
+    m9_sweep.py / m9_null.py 一律用這一支，不各寫一份——分岔正是上面第 2 點的成因。
+    """
+    return {k: v for k, v in r.items()
+            if k not in ("sim_s", "wall_s") and not (k == "seed" and v is None)}
+
+
 def point(Q, W, D, clip, snr, frames=FRAMES, variant="", seed=None):
     """一個 (組態, SNR) 點的 gate-level 功耗。
 
@@ -136,13 +158,9 @@ def main():
             return 1
         conv.append(point(Q, W, D, clip, snr, frames=f))
 
-    # sim_s / wall_s 是 wall-clock 遙測，每次都會變，不是科學結果。它們不入 git 追蹤的證據檔
-    # （否則 power.json 永遠無法逐位元組重生）；功耗數值 p_*_w 才是證據。run 層級的計時另有記錄。
-    def _no_timing(r):
-        return {k: v for k, v in r.items() if k not in ("sim_s", "wall_s")}
     with open(os.path.join(DATA, "power.json"), "w") as f:
-        json.dump({"points": [_no_timing(r) for r in rows],
-                   "convergence": [_no_timing(r) for r in conv]}, f, indent=2)
+        json.dump({"points": [evidence_only(r) for r in rows],
+                   "convergence": [evidence_only(r) for r in conv]}, f, indent=2)
     print(f"\n-> data/power.json（{len(rows)} 個點）")
     return 0
 

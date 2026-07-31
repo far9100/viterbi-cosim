@@ -1,13 +1,30 @@
 #!/usr/bin/env bash
 # check_paper_numbers.py 的變異測試：一個抓不到錯的檢查器沒有價值。
-# 逐一注入已知的錯誤，確認它**每一種都抓得到**，然後還原。
+# 逐一注入已知的錯誤，確認它**每一種都抓得到**。
+#
+# ## 為什麼是對副本操作（2026-07-31）
+#
+# 原本的做法是 `sed -i` 直接改 git 追蹤中的 docs/report.md，靠 `trap EXIT` +
+# /tmp/report.bak 還原。但這支 script 是 `make all` 與 `make repro` 的**最後一步**，
+# 跑在數小時的冷跑尾端——被 SIGKILL、/tmp 滿了、或機器重開，都會留下一份被改壞的
+# 追蹤文件，而且看起來就像是有人手動改壞的。
+#
+# 現在把 report.md 複製到暫存目錄，只改副本，用 FEC_REPORT_PATH 把檢查器指過去。
+# 真正的文件從頭到尾沒有被寫過一次，也就不需要還原機制。
 set -uo pipefail
 cd "$(dirname "$0")/.."
 source scripts/env.sh
 
-R=docs/report.md
-cp "$R" /tmp/report.bak
-trap 'cp /tmp/report.bak "$R"' EXIT
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+R="$WORK/report.md"
+cp docs/report.md "$R"
+cp docs/report.md "$WORK/report.orig"
+
+# 檢查器讀副本，其餘文件（falsification / spec / README）仍讀真本——
+# 變異只注入在 report.md，這正是要測的範圍。
+check() { FEC_REPORT_PATH="$R" python3 scripts/check_paper_numbers.py "$@"; }
 
 pass=0
 fail=0
@@ -20,7 +37,7 @@ fail=0
 # 所以先確認乾淨狀態 exit 0，再要求每個變異都讓 exit 變成非 0。
 try() {
   local name="$1"
-  if python3 scripts/check_paper_numbers.py > /tmp/mut.txt 2>&1; then
+  if check > /tmp/mut.txt 2>&1; then
     echo "  **[漏掉]** $name  —— checker 竟然 exit 0"
     grep -E "mismatches|coverage" /tmp/mut.txt | head -2 | sed 's/^/        /'
     fail=$((fail+1))
@@ -29,15 +46,15 @@ try() {
     grep -m1 "MISMATCH" /tmp/mut.txt | sed 's/^/        /'
     pass=$((pass+1))
   fi
-  cp /tmp/report.bak "$R"
+  cp "$WORK/report.orig" "$R"
 }
 
 echo "=== 前置：乾淨狀態必須 exit 0（否則變異測試沒有意義）"
-if python3 scripts/check_paper_numbers.py > /tmp/clean.txt 2>&1; then
+if check > /tmp/clean.txt 2>&1; then
   echo "  OK：乾淨狀態 exit 0"
 else
   echo "  **乾淨狀態就已經 exit 1 —— 先修好報告再跑變異測試**"
-  cat /tmp/clean.txt | head -8 | sed 's/^/    /'
+  head -8 /tmp/clean.txt | sed 's/^/    /'
   exit 1
 fi
 
@@ -73,8 +90,17 @@ echo
 echo "=== 結果：抓到 $pass 種，漏掉 $fail 種"
 [ "$fail" -eq 0 ] && echo "檢查器有效。" || echo "**檢查器有漏洞，必須修。**"
 
-# 還原後確認回到 0 mismatch
-cp /tmp/report.bak "$R"
+# 真正的 docs/report.md 從頭到尾沒被寫過；這裡直接對它跑一次，確認 0 mismatch。
 echo
-echo "=== 還原後"
+echo "=== 對真正的 docs/report.md"
 python3 scripts/check_paper_numbers.py
+rc=$?
+
+# 工作區必須乾淨——如果變異測試曾經寫到追蹤檔，這裡會抓到。
+if [ -n "$(git status --porcelain -- docs/report.md)" ]; then
+  echo "**變異測試動到了 git 追蹤的 docs/report.md —— 這正是它不該做的事。**"
+  exit 1
+fi
+
+[ "$fail" -eq 0 ] || exit 1
+exit $rc

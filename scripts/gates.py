@@ -46,6 +46,16 @@ def _git(*args):
         return "unknown"
 
 
+def _milestone_key(row):
+    """gates.csv 的排序鍵：把 "M12" 解析成 12，讓里程碑編號沒有上限。
+
+    無法解析的 milestone 排到最後（而不是拋例外）——gates.csv 是既有檔案，
+    真有一列壞掉時，寧可讓它排在檔尾被看見，也不要讓整支 gate script 掛掉而不寫任何 artifact。
+    """
+    ms = str(row.get("milestone", ""))
+    return (0, int(ms[1:])) if ms[:1] == "M" and ms[1:].isdigit() else (1, 0)
+
+
 def collect_metadata(extra=None):
     """收集重現這次 run 所需的全部資訊（CLAUDE.md §5.3）。
 
@@ -142,13 +152,18 @@ class Run:
         # 孤兒在結構上不可能存在，不必再靠人去發現。
         merged = [r for r in old if r["milestone"] != self.milestone] + new
 
-        # 依 milestone 穩定排序，讓 gates.csv 的列序是**確定的**（M0..M5），與 gate 的執行順序無關。
+        # 依 milestone 穩定排序，讓 gates.csv 的列序是**確定的**（M0..Mn），與 gate 的執行順序無關。
         # 否則單獨重跑某個里程碑的 gate 會用 replace-by-key 把它的列搬到檔尾，讓列序漂移；
-        # 完整冷跑（m0->m5 依序）本來就產生 M0..M5 的順序，這個排序讓「單獨重跑」也收斂到同一序，
+        # 完整冷跑（m0->m9 依序）本來就產生 M0..M9 的順序，這個排序讓「單獨重跑」也收斂到同一序，
         # 於是 gates.csv 對「刪光重生」逐位元組可重生（冷跑對 gates.csv 用的是嚴格判準）。
         # 穩定排序保留同一 milestone 內的 check() 呼叫順序。
-        milestone_order = {f"M{i}": i for i in range(10)}
-        merged.sort(key=lambda r: milestone_order.get(r["milestone"], 99))
+        #
+        # **排序鍵用解析的，不用寫死的表。** 第一版是 `{f"M{i}": i for i in range(10)}`，
+        # 上限剛好卡在專案當時的最後一個里程碑 M9。一旦出現 M10，它和之後的每一個里程碑
+        # 都會落到同一個 fallback 鍵，穩定排序就退化成「哪一支 gate 最後跑」——
+        # 也就是列序重新取決於執行順序，正是這段排序當初要消滅的東西。
+        # 而且它不會報錯，只會讓冷跑的逐位元組判準偶發性地紅燈，很難查。
+        merged.sort(key=_milestone_key)
 
         with open(gpath, "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=GATES_FIELDS)
