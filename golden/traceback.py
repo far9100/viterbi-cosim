@@ -33,6 +33,9 @@ def traceback(surv, best, D, n_info, m, mode="window"):
     m      : 記憶元數（K−1）
     mode   : 'window' = uniform depth D 的 sliding window（C2 的比對標的）
              'ml'     = 由終止狀態 0 全幀回溯（對照組）
+             'batch'  = 每 D 個 stage 成批回溯 2D 步、輸出最舊的 D 個位元
+                        （B2 的語意，凍結於 docs/memory_traceback_baseline.md §1；
+                        有效深度 ∈ [D, 2D]，不是 uniform D）
 
     回傳 (B, n_info) 的 uint8。
     """
@@ -47,6 +50,46 @@ def traceback(surv, best, D, n_info, m, mode="window"):
         for t in range(T - 1, -1, -1):
             dec[:, t] = (s & 1).astype(np.uint8)
             s = _pred(surv[:, t, :], s, m_bit)
+        return dec[:, :n_info]
+
+    if mode == "batch":
+        # --- B2：batch（one-pointer）回溯。語意凍結於
+        #     docs/memory_traceback_baseline.md §1，量測開跑前提交。---
+        #
+        # 與 window 的差別**不是實作細節，是演算法**：window 對每個 t 各追 D 步、
+        # 每個位元的有效深度恰好是 D；batch 每 D 個 stage 才追一次、一次追 2D 步，
+        # 丟掉最新的 D 個、輸出最舊的 D 個，於是有效深度落在 [D, 2D] 的區間裡。
+        #
+        # 這也是它過不了「對 window 的 C2」的原因 —— 兩者本來就會解出不同的位元。
+        # 所以 golden 端有一份對應的凍結語意，RTL 再對它比對（凍結文件 §3.2）。
+        for t_end in range(2 * D - 1, T, D):
+            s = best[:, t_end].astype(np.int64)
+            out = np.zeros((B, 2 * D), dtype=np.uint8)
+            for k in range(2 * D):
+                out[:, k] = (s & 1).astype(np.uint8)
+                s = _pred(surv[:, t_end - k, :], s, m_bit)
+            # out[k] 對應 stage t_end - k。輸出最舊的 D 個：
+            # k = D .. 2D-1，也就是 stage t_end-2D+1 .. t_end-D。
+            for k in range(D, 2 * D):
+                dec[:, t_end - k] = out[:, k]
+
+        # --- 開頭與尾端 ---
+        #
+        # 開頭的 stage 0 .. 2D-2 沒有被任何一次批次涵蓋到（第一次批次要等到
+        # t_end = 2D-1 才發生，而它輸出的是 stage 0 .. D-1）。實際上 stage 0..D-1
+        # 已由第一次批次輸出；剩下 D .. 尾端未被涵蓋的部分用終止狀態回溯補齊，
+        # 與 window 模式的尾端處理同一個做法（硬體上也是這樣：frame 結束時
+        # survivor 記憶體裡還留著最後幾個 stage）。
+        covered = set()
+        for t_end in range(2 * D - 1, T, D):
+            covered.update(range(t_end - 2 * D + 1, t_end - D + 1))
+        s = np.zeros(B, dtype=np.int64)                  # s_T = 0
+        tail = [t for t in range(T - 1, -1, -1)]
+        for t in tail:
+            if t not in covered:
+                dec[:, t] = (s & 1).astype(np.uint8)
+            s = _pred(surv[:, t, :], s, m_bit)
+
         return dec[:, :n_info]
 
     if mode != "window":
