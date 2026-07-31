@@ -1,10 +1,10 @@
 {
-  "start_timestamp": "2026-07-31T15:49:03+0800",
+  "start_timestamp": "2026-08-01T00:03:06+0800",
   "argv": [
     "scripts/m0_gate.py"
   ],
-  "git_commit": "b69fdbc8f9ca9cf4e7dafbdbf0c949e474afa173",
-  "git_dirty": true,
+  "git_commit": "9c46bf8c59f23cfc9a8a48a03d05f633c2b14f58",
+  "git_dirty": false,
   "python": "3.12.3",
   "numpy": "2.4.4",
   "verilator": "Verilator 5.051 devel rev v5.050-59-gdde8de0a0 (mod)",
