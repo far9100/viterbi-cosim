@@ -161,9 +161,9 @@ def a(sec, desc, truth, cited, nd=2, doc="report"):
 
 
 # ---- §1 驗證鏈路 ----
-# 26（不是 27）：M2 的 C2′ gate 曾改名（L2-GPU -> L2-torch），舊列在 gates.csv 遺留成孤兒，
-# 把總數灌成 27。移除 stale 列後真正的 gate 數是 26（M0 3 + M1 6 + M2 3 + M3 5 + M4 3 + M5 6）。
-a("1", "gate 總數", len(GATES), 26, 0)
+# 36 筆記錄 = 30 個有判準的 gate + 6 筆觀測（M0 3 + M1 6 + M2 3 + M3 5 + M4 3 + M5 8 + M9 8）。
+# gate 改名留下孤兒的破口已在 scripts/gates.py 修根因（整批取代 milestone），不再靠人發現。
+a("1", "gate 總數", len(GATES), 36, 0)
 
 # ---- §1.1 通訊層（真值從 gates.csv 的 measured 欄抽出，不是硬寫的常數）----
 a("1.1", "未編碼 @1e-5", gate_num("G1 "), 9.571, 3)
@@ -279,6 +279,155 @@ for fom, ea6, sh6, wi in ((10, 1.28, 0.4, 6.42), (100, 12.80, 4.0, 7.36),
     a("3.4", f"FoM{fom} Δd* 含 ADC",
       100 * (float(r6["dstar_with_adc_m"]) / float(r3["dstar_with_adc_m"]) - 1), wi, 2)
 
+# ---- §3.2.1 不確定度傳播（後補：先前 F1–F3 的裁決全部只有點估計）----
+def dstar_ci(Q, D, model, env, key, eta=0.1):
+    return float(next(x[key] for x in DS if int(x["Q"]) == Q and int(x["D"]) == D
+                      and x["model"] == model and x["env"] == env
+                      and float(x["eta_pa"]) == eta))
+
+
+a("3.2.1", "d* Q3D32 A/indoor 點估計",
+  dstar_ci(3, 32, "A", "indoor", "dstar_m"), 17.76, 2)
+a("3.2.1", "d* Q3D32 A/indoor CI 低", dstar_ci(3, 32, "A", "indoor", "dstar_ci_low_m"),
+  17.60, 2)
+a("3.2.1", "d* Q3D32 A/indoor CI 高", dstar_ci(3, 32, "A", "indoor", "dstar_ci_high_m"),
+  17.91, 2)
+
+
+def req_sigma(Q, D):
+    return float(next(x["required_sigma_db"] for x in DS
+                      if int(x["Q"]) == Q and int(x["D"]) == D))
+
+
+# 報告 §3.2.1 引用的三個 winner 的 σ（(Q,D) 明確指定 —— 只用 Q 會抓到第一列，Q=6 有兩個 D）
+# README 也引用同一組（用來說明 winner 排序是平手），故兩份文件都驗。
+for _Q, _D, _s in ((6, 64, 0.0239), (4, 64, 0.0225), (6, 32, 0.0208)):
+    a("3.2.1", f"Q{_Q}D{_D} required σ", req_sigma(_Q, _D), _s, 4)
+    a("3.2.1", f"Q{_Q}D{_D} required σ", req_sigma(_Q, _D), _s, 4, doc="readme")
+
+# Δd* 的區間：直接從 gates.csv 的 F2 measured 欄取（那是裁決的權威記錄）。
+_f2m = next(g["measured"] for g in GATES if g["gate"].startswith("F2 "))
+for _label, _lo, _hi in (("模型A/free_space", -10.84, 11.75),
+                         ("模型A/indoor", -6.06, 6.55),
+                         ("模型B/free_space", -1.05, -0.45),
+                         ("模型B/indoor", -0.60, -0.26)):
+    for _v in (_lo, _hi):
+        # fmt() 定義在本檔更下方，這裡直接格式化（避免前向參照）
+        _s = f"{abs(_v):.2f}"
+        if _s not in _f2m.replace(",", ""):
+            fails.append(f"[dstar:ci] F2 gate 的 measured 欄缺 {_label} 的區間端點 {_s}")
+
+# 方向性斷言：四個 Δd* 的 95% 區間都不得跨過零點 —— 這正是「符號翻轉不是雜訊」的內容。
+# 一旦某個區間跨零，報告就不得再宣稱符號翻轉，而這條會讓 make report 紅燈。
+for _m, _e in (("A", "free_space"), ("A", "indoor"),
+               ("B", "free_space"), ("B", "indoor")):
+    _lo = re.search(rf"模型{_m}/{_e}: [-+][\d.]+% \[([-+][\d.]+), ([-+][\d.]+)\]", _f2m)
+    if not _lo:
+        fails.append(f"[dstar:ci] F2 gate 沒有 模型{_m}/{_e} 的區間 —— "
+                     f"裁決缺不確定度，不得宣稱符號")
+    elif float(_lo.group(1)) * float(_lo.group(2)) <= 0:
+        fails.append(f"[dstar:ci] 模型{_m}/{_e} 的 Δd* 區間跨過零點 "
+                     f"[{_lo.group(1)}, {_lo.group(2)}] —— **符號未被解析出來**，"
+                     f"報告不得宣稱「符號會翻轉」")
+
+# ---- §1 「gate」與「觀測」必須分開計數 ----
+#
+# gates.csv 裡其實有兩種列：**有 pass/fail 判準的 gate**，與**只是記錄下來的觀測**
+# （expected 欄自陳「（觀測，不是 pass/fail）」）。把兩者混報成「N 個 gate 全綠」
+# 略微灌水——一個沒有判準的東西不可能「不綠」。
+#
+# 目前是 26 個有判準的 gate + 2 筆觀測（M5-3 功耗 vs SNR、M5-4 power gating）。
+# 這條檢查讓分類不能悄悄漂移：新增觀測卻沒更新文件、或把觀測寫成 gate，都會紅燈。
+_OBS = [g for g in GATES if "觀測" in g["expected"] or "觀測" in g["tolerance"]]
+_REAL = [g for g in GATES if g not in _OBS]
+a("1", "有判準的 gate 數", len(_REAL), 30, 0)
+a("1", "觀測筆數", len(_OBS), 6, 0)
+if len(_REAL) + len(_OBS) != len(GATES):
+    fails.append("[gates] gate / 觀測的分類沒有覆蓋 gates.csv 的每一列")
+
+# ---- §3.2.2 energy_model.md §2 宣告過、但 M5 從未跑的兩條掃描 ----
+SENS = load("results_m5_sensitivity.csv")
+
+
+def sens_d(Q, D, nf, pc, model, env, gated=True):
+    return float(next(x["dstar_m"] for x in SENS
+                      if int(x["Q"]) == Q and int(x["D"]) == D
+                      and float(x["nf_db"]) == nf and int(x["p_circuit_mw"]) == pc
+                      and x["model"] == model and x["env"] == env
+                      and x["power_gated"] == str(gated)))
+
+
+for _nf, _fs, _in in ((3.0, 216.9, 21.6), (6.0, 153.6, 17.8), (10.0, 96.9, 13.6)):
+    a("3.2.2", f"NF{_nf} d* A/free", sens_d(3, 32, _nf, 60, "A", "free_space"), _fs, 1)
+    a("3.2.2", f"NF{_nf} d* A/indoor", sens_d(3, 32, _nf, 60, "A", "indoor"), _in, 1)
+for _pc, _in in ((20, 63.0), (60, 86.0), (120, 104.8)):
+    a("3.2.2", f"Pc{_pc} d* B/indoor", sens_d(3, 32, 6.0, _pc, "B", "indoor"), _in, 1)
+a("3.2.2", "F1b 掃描全域最小 d*",
+  min(float(x["dstar_m"]) for x in SENS), 13.65, 2)
+
+# power gating 的實測量級（文件 §5 說 200 倍，實際 E_dec 只變 0.055%、d* 只變 0.017%）。
+# 報告引用的是**跨組態的最大值**，故這裡也取 max，不是挑某一個組態。
+def _pg_pairs(key):
+    out = []
+    for r in SENS:
+        if r["power_gated"] != "True":
+            continue
+        m = next((x for x in SENS
+                  if x["power_gated"] == "False" and x["Q"] == r["Q"]
+                  and x["D"] == r["D"] and x["nf_db"] == r["nf_db"]
+                  and x["p_circuit_mw"] == r["p_circuit_mw"]
+                  and x["model"] == r["model"] and x["env"] == r["env"]), None)
+        if m:
+            out.append((float(r[key]), float(m[key])))
+    return out
+
+
+_d_pairs = _pg_pairs("dstar_m")
+_e_pairs = _pg_pairs("e_dec_pj_per_bit")
+a("3.2.2", "power gating 對 d* 的影響（最大）",
+  max(100.0 * (off / on - 1.0) for on, off in _d_pairs), 0.027, 3)
+a("3.2.2", "power gating 對 E_dec 的影響（最大）",
+  max(100.0 * (off / on - 1.0) for on, off in _e_pairs), 0.055, 3)
+
+# 漏電佔總功耗的比例——這是「200 倍作用在一個可忽略的項上」的量化依據
+_RES = load("results.csv")
+a("3.2.2", "漏電佔總功耗",
+  max(100.0 * float(r["p_leak_w"]) / float(r["p_total_w"]) for r in _RES),
+  0.00028, 5)
+
+# 方向性斷言：關掉 power gating 只能讓 E_dec 變大（多付閒置時的漏電），不可能變小。
+if any(off < on for on, off in _e_pairs):
+    fails.append("[power-gating] 關掉 power gating 反而讓 E_dec 變小 —— "
+                 "energy_model.e_dec_of() 的兩個分支寫反了")
+
+# ---- §5-1 traceback 記憶體的敏感度線（修正原本方向反了的推論）----
+# 原文宣稱「Q 之間的相對比較不受影響」。實際上 traceback 是 E_dec 裡與 Q 無關的那一項，
+# 高估它會**稀釋** Q 依賴 ⇒ 已發表的 Δd* 是**下界**。這組 assertion 把該表釘回 CSV。
+TBS = load("results_m5_tb_sensitivity.csv")
+
+
+def tbs(fac, env, key):
+    return float(next(r[key] for r in TBS if float(r["tb_factor"]) == fac
+                      and r["model"] == "A" and r["env"] == env))
+
+
+for _fac, _ratio, _free, _ind in ((1.0, 1.2586, 11.29, 6.31),
+                                  (0.5, 1.3551, 15.48, 8.57),
+                                  (0.2, 1.4572, 19.75, 10.85),
+                                  (0.1, 1.5056, 21.73, 11.89)):
+    a("5.1", f"tb×{_fac} E_dec 比值", tbs(_fac, "indoor", "e_dec_ratio"), _ratio, 4)
+    a("5.1", f"tb×{_fac} Δd* A/free",
+      tbs(_fac, "free_space", "delta_dstar_pct"), _free, 2)
+    a("5.1", f"tb×{_fac} Δd* A/indoor",
+      tbs(_fac, "indoor", "delta_dstar_pct"), _ind, 2)
+
+# 方向性斷言：縮減 traceback 必須讓 Δd* **單調變大**（這就是「已發表值是下界」的內容）。
+# 不是文件引用檢查，直接進 fails。
+_seq = [tbs(f, "indoor", "delta_dstar_pct") for f in (1.0, 0.5, 0.2, 0.1)]
+if not all(x < y for x, y in zip(_seq, _seq[1:])):
+    fails.append(f"[tb-sens] 縮減 traceback 功耗未使 Δd* 單調變大：{_seq} —— "
+                 f"「已發表的 Δd* 是下界」這個結論不成立")
+
 # ---- §4.1 機制：資訊 vs 活動 ----
 for snr, agree, tog in ((-2.0, 0.8982, 0.5011), (3.0, 1.0000, 0.5015),
                         (10.0, 1.0000, 0.5002)):
@@ -349,7 +498,7 @@ a("rm", "pm R²", trend("pm")[1], 0.913, 3, doc="readme")
 a("rm", "反事實 對稱 bit1", mech("fixed_hi_sym", "tog_r_b1"), 0.5042, 4, doc="readme")
 a("rm", "反事實 DC偏移 bit1", mech("fixed_hi_asym", "tog_r_b1"), 0.0000, 4,
   doc="readme")
-a("rm", "gate 總數", len(GATES), 26, 0, doc="readme")
+a("rm", "gate 總數", len(GATES), 36, 0, doc="readme")
 
 # 功耗佔比（README §M5 引用了「43.0–54.2% 的功耗」與「10.3–13.5% 的功耗」）
 for (_q, _d), _lab in (((3, 32), "Q3"), ((6, 32), "Q6")):
@@ -514,6 +663,61 @@ for _q in _PREREG_QUOTES:
         fails.append(f"[prereg:quote] 報告引用了 {_q} 當作預先登記的內容，"
                      f"但 **falsification.md 裡沒有這個值** —— 引用不實。")
 
+# ---- §4d 每個 d* 都必須能由 data/results.csv + 凍結常數**重算**出來 ----
+#
+# `docs/energy_model.md` §7 承諾過這件事：
+#
+#   > `scripts/check_paper_numbers.py` 會再檢查報告引用的每個 d\* 數字
+#   > 都能由 `data/results.csv` + 本文件的常數重算出來。
+#
+# 但這個檢查從來沒被寫出來，而且它依賴的 `data/results.csv` 當時根本不存在。
+# 上面所有 d* 的 assertion 走的是 `dstar()`，那只是**讀** results_m5_dstar.csv 裡
+# 已經算好的 `dstar_m` —— 它驗的是「報告有沒有抄對 CSV」，不是「CSV 算得對不對」。
+# 兩者的差別在 M5 的 d* 計算若有 bug，前者會全綠。
+#
+# 這裡把承諾補上：從 results.csv 的 (required_ebn0_db, e_dyn_per_bit_j, p_leak_w)
+# 出發，先按 docs/energy_model.md §5 的分解式重建 E_dec，再用 §3 的 d_star() 重算，
+# 與 results_m5_dstar.csv 逐列比對。**刻意不經過 A / len(A)**，因為它是結構檢查，
+# 不是「文件引用」檢查（與 §2/§3/§4 同一類），也就不該動 README 的 assertion 計數。
+sys.path.insert(0, ROOT)
+from scripts.energy_model import (F_CLK, N_PATHLOSS,  # noqa: E402
+                                  d_star as _d_star)
+
+_RES_PATH = os.path.join(DATA, "results.csv")
+if not os.path.exists(_RES_PATH):
+    fails.append("[dstar:recompute] data/results.csv 不存在 —— "
+                 "規格書 §8/§11.4 與 CLAUDE.md §5.4 指定它是唯一資料來源，"
+                 "docs/energy_model.md §5/§7 的承諾也繫在它上面")
+else:
+    _RES = load("results.csv")
+    # 以 (Q, D) 取 3 dB 的那一列 —— d* 用的就是這個工作點
+    _res3 = {(int(r["Q"]), int(r["D"])): r
+             for r in _RES if float(r["snr_db"]) == 3.0}
+    _n_recomp = 0
+    for _row in DS:
+        _key = (int(_row["Q"]), int(_row["D"]))
+        _src = _res3.get(_key)
+        if _src is None:
+            fails.append(f"[dstar:recompute] results.csv 缺 Q={_key[0]} D={_key[1]} "
+                         f"@3 dB 那一列 —— d* 無法由唯一資料來源重算")
+            continue
+        # docs/energy_model.md §5：E_dec(f_clk) = e_dyn_per_bit + p_leak / f_clk
+        _e_dec = float(_src["e_dyn_per_bit_j"]) + float(_src["p_leak_w"]) / F_CLK
+        _recomp = _d_star(float(_src["required_ebn0_db"]), _e_dec,
+                          float(_row["eta_pa"]), N_PATHLOSS[_row["env"]],
+                          _row["model"])
+        _stored = float(_row["dstar_m"])
+        # results_m5_dstar.csv 存的是 round(v, 2)，故容差取半個最低位
+        if abs(_recomp - _stored) > 0.005 + 1e-9 * _stored:
+            fails.append(
+                f"[dstar:recompute] Q={_key[0]} D={_key[1]} "
+                f"{_row['model']}/{_row['env']}/η={_row['eta_pa']}："
+                f"由 results.csv + 凍結常數重算得 {_recomp:.4f} m，"
+                f"但 results_m5_dstar.csv 存的是 {_stored} m")
+        _n_recomp += 1
+    if _n_recomp and not any(f.startswith("[dstar:recompute]") for f in fails):
+        DSTAR_RECOMPUTED = _n_recomp      # 供最後列印
+
 # ---- §4c 自我指涉：README 說檢查器有幾條 assertion，就必須真的有幾條 ----
 # 這條會在每次新增 assertion 時「壞掉」——那正是它的用途：逼 README 跟著更新，
 # 而不是讓它慢慢變成一句過期的自我吹噓（README 曾經停在 M3+M4 兩個里程碑）。
@@ -538,6 +742,9 @@ EXPECT_UNCOVERED = {
     "5.0",      # F2 的判準門檻（預先登記的常數，不是量測值）
     "30.0",     # F3 的判準門檻
     "0.5",      # 量化器的 tie / 最大熵
+    # §3.2.1 的不確定度傳播用到的兩個**分析參數**（不是量測值，沒有 CSV 可對）：
+    "0.2",      # E_dec 的量測重複性，取自 M5-2 收斂測試（44.12/44.03/44.08 mW）
+    "4.5",      # BER 掃描的 SNR 網格點（4.0/4.5/5.0/5.5 dB），交叉點落在第一個區間內
     "2.8", "1.6", "0.87",   # 事前登記的預測值（來自 falsification.md，非本次量測）
     "0.50",     # 同上
     # falsification.md §3.2 的 α=0.50 那一列。**不是量測值**，是事前寫死的預測，
@@ -618,7 +825,45 @@ for _n in _uncov:
     fails.append(f"[coverage] 報告中的數字 {_n} 既未被 assertion 覆蓋、"
                  f"也未列入白名單 —— 它沒有對回任何 CSV")
 
+# ================================================================ thesis.md（整併草稿）
+# docs/thesis.md 是把 report.md 與五份凍結文件整併成的碩士論文草稿。這裡把它的**承重量測數字**
+# 釘回 CSV：每一條同時驗 (a) 等於 CSV 真值、(b) 字串出現在 thesis.md。
+# 刻意**不經過 A / len(A)**（免動 README 的 assertion 計數自我檢查 §4c），也**不套用 §5 的完備
+# 覆蓋掃描**——草稿含大量背景常數與文獻值，完備掃描此刻過於脆弱。草稿補全後可再升級為完整覆蓋。
+_THESIS_PATH = os.path.join(ROOT, "docs", "thesis.md")
+_thesis_checks = []
+if os.path.exists(_THESIS_PATH):
+    _TT = open(_THESIS_PATH, encoding="utf-8").read().replace(",", "").replace("−", "-")
+    _thesis_checks = [
+        ("gate 總數", len(GATES), 36, 0),
+        ("未編碼 @1e-5", gate_num("G1 "), 9.571, 3),
+        ("編碼增益", gate_num("G2b"), 5.434, 3),
+        ("3-bit 損失", gate_num("G3 "), 0.225, 3),
+        ("硬判決損失", gate_num("G4b"), 2.413, 3),
+        ("F1 最小 d*", min(float(x["dstar_m"]) for x in DS), 17.8, 1),
+        ("F2 模型A/free", dd("A", "free_space"), 11.29, 2),
+        ("F2 模型A/indoor", dd("A", "indoor"), 6.31, 2),
+        ("F3 模型B/free", dd("B", "free_space"), -0.75, 2),
+        ("F3 模型B/indoor", dd("B", "indoor"), -0.43, 2),
+        ("d* Q3D32 A/free", dstar(3, 32, "A", "free_space"), 153.6, 1),
+        ("d* Q6D32 A/free", dstar(6, 32, "A", "free_space"), 170.9, 1),
+        ("E_dec 比值", _e6 / _e3, 1.2586, 4),
+        ("α 實測", 2.0 * (_e6 / _e3 - 1.0), 0.517, 3),
+        ("α 誤差倍數", 2.0 * (_e6 / _e3 - 1.0) / 0.15, 3.4, 1),
+    ]
+    for _desc, _truth, _cited, _nd in _thesis_checks:
+        _s = fmt(_cited, _nd)
+        _tol = 0.5 * 10 ** (-_nd) if _nd > 0 else 0.5
+        if abs(round(float(_truth), _nd) - round(float(_cited), _nd)) > _tol:
+            fails.append(f"[thesis] {_desc}: thesis={_cited} 但 CSV={_truth}")
+        elif _s not in _TT and _s.lstrip("-") not in _TT:
+            fails.append(f"[thesis] {_desc}: 值 {_s} 與 CSV 相符，但**在 thesis.md 中找不到**")
+else:
+    fails.append("[thesis] docs/thesis.md 不存在——整併草稿應已建立")
+_n_thesis = len(_thesis_checks)
+
 print(f"assertions: {len(A)}   mismatches: {len(fails)}")
+print(f"thesis.md 承重數字：{_n_thesis} 條已釘回 CSV")
 for f in fails:
     print("  MISMATCH:", f)
 
@@ -626,6 +871,9 @@ if not fails:
     if "PREREG_GAP_H" in dir():
         print(f"\n預先登記檢查：falsification.md / energy_model.md 的 commit 早於"
               f"功耗量測 **{PREREG_GAP_H:.1f} 小時**（git 時間戳可驗證）。")
+    if "DSTAR_RECOMPUTED" in dir():
+        print(f"d* 重算檢查：{DSTAR_RECOMPUTED} 個 d* 全部由 data/results.csv + "
+              f"docs/energy_model.md 的凍結常數重算驗證（不是讀已算好的值）。")
     print("數字覆蓋：完整（報告中每個帶單位的數字都已對回 CSV 或列入白名單）。")
 
 sys.exit(1 if fails else 0)
