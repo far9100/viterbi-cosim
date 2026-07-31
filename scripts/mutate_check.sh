@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check_paper_numbers.py 的變異測試：一個抓不到錯的檢查器沒有價值。
-# 逐一注入已知的錯誤，確認它**每一種都抓得到**。
+# 逐一注入已知的錯誤（8 種），確認它**每一種都抓得到**。
 #
 # ## 為什麼是對副本操作（2026-07-31）
 #
@@ -22,9 +22,20 @@ R="$WORK/report.md"
 cp docs/report.md "$R"
 cp docs/report.md "$WORK/report.orig"
 
+# 變異 7/8 要改的是**凍結文件**與勘誤索引，不能碰真本（那正是 §6 禁止的事）。
+# 所以整個 docs/ 也複製一份，用 FEC_DOCS_ROOT 讓 §6 改讀副本；
+# 對照用的凍結 blob 仍從真正的 repo 取，這樣「磁碟上的本體與凍結時不同」才驗得出來。
+DR="$WORK/docsroot"
+mkdir -p "$DR"
+cp -r docs "$DR/docs"
+cp -r "$DR/docs" "$WORK/docs.orig"
+
 # 檢查器讀副本，其餘文件（falsification / spec / README）仍讀真本——
-# 變異只注入在 report.md，這正是要測的範圍。
-check() { FEC_REPORT_PATH="$R" python3 scripts/check_paper_numbers.py "$@"; }
+# 變異只注入在 report.md 與 docs/ 的副本，這正是要測的範圍。
+check() {
+  FEC_REPORT_PATH="$R" FEC_DOCS_ROOT="$DR" \
+    python3 scripts/check_paper_numbers.py "$@"
+}
 
 pass=0
 fail=0
@@ -47,6 +58,7 @@ try() {
     pass=$((pass+1))
   fi
   cp "$WORK/report.orig" "$R"
+  rm -rf "$DR/docs" && cp -r "$WORK/docs.orig" "$DR/docs"
 }
 
 echo "=== 前置：乾淨狀態必須 exit 0（否則變異測試沒有意義）"
@@ -85,6 +97,19 @@ try "新增未被覆蓋的帶單位數字（87.3 mW）"
 # 6. 靜默地把預先登記的引用改錯（跨文件比對）
 sed -i 's/+10\.8% \/ +6\.1%/+33.3% \/ +44.4%/' "$R"
 try "誤引預先登記的內容（+10.8%/+6.1% -> 捏造值）"
+
+# 7. 就地改掉凍結文件的**本體**（§6a）
+#    這是 CLAUDE.md §5.1 明令禁止的事，先前只靠紀律，沒有任何東西擋得住。
+#    改一個字就必須紅燈——否則凍結文件的 commit 時間戳就不再描述它現在說的話。
+sed -i 's/PM_INIT/PM_INIT_TAMPERED/' "$DR/docs/wordlength_bound.md"
+try "凍結本體被就地改動（wordlength_bound.md）"
+
+# 8. 勘誤索引與文件對不上（§6b）
+#    加一列指向一份根本沒有勘誤帶的凍結文件。單向檢查會漏掉這種，
+#    所以 §6 兩個方向都對帳。
+printf '| E-99 | `docs/trellis_convention.md` | §1 | 捏造 | 捏造 | 無 | 無 |\n' \
+  >> "$DR/docs/errata.md"
+try "勘誤索引指向沒有勘誤帶的文件（E-99）"
 
 echo
 echo "=== 結果：抓到 $pass 種，漏掉 $fail 種"

@@ -258,3 +258,25 @@ ADC 能量與 E_dec **同向**（都隨 Q 增加）⇒ 只會**加大** Δd\*，
 * d\* 的絕對值仍是**上界**：survivor 記憶體用 flop 陣列而非 SRAM macro
   （`docs/energy_model.md` §6.1）。Q 之間的**相對**比較不受影響（同一個 D 下 traceback 完全相同）。
 * Fmax 是 post-placement / pre-route，**樂觀**（`data/results_m5_fmax.csv`）。
+
+---
+
+# ▼▼▼ 以下為凍結後追加的勘誤。以上為凍結原文，一字未改。▼▼▼
+
+本節由 `docs/errata.md` 索引，並由 `scripts/check_paper_numbers.py` §6 雙向對帳。
+凍結本體（第一個 ▼▼▼ 之前）另有逐位元組對照凍結 tag 的檢查。
+
+## 勘誤 E-04（2026-07-31）
+
+**原文（§5.4）**：「d\* 的絕對值仍是**上界**：survivor 記憶體用 flop 陣列而非 SRAM macro
+（`docs/energy_model.md` §6.1）。Q 之間的**相對**比較不受影響（同一個 D 下 traceback 完全相同）。」
+
+**更正**：第一句成立，**第二句的方向反了**。
+traceback 能量在 Q3 與 Q6 之間確實是共模項，但正因為它是共模項，
+用 SRAM macro 把它縮小會讓兩者的 E_dec **差值佔比變大**，於是 Δd\* **變大**。
+也就是說已報的 Δd\*（模型 A/free_space **+11.29%**）是一個**下界**，
+而不是「不受影響」。這使 F2 的裁決比原本以為的更穩健，不是更弱。
+
+**證據**：`data/results_m5_tb_sensitivity.csv` —— `delta_dstar_pct` 隨 `tb_factor` 下降而單調上升。
+
+**發現於**：CHANGELOG `2026-07-29-06`。

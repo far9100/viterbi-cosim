@@ -434,6 +434,55 @@ if not all(x < y for x, y in zip(_seq, _seq[1:])):
     fails.append(f"[tb-sens] 縮減 traceback 功耗未使 Δd* 單調變大：{_seq} —— "
                  f"「已發表的 Δd* 是下界」這個結論不成立")
 
+# ---- §7 M9 低功耗基準線 ----
+# 報告 §7 先前不存在，於是 M9 的數字從來沒有被這支檢查器管過——
+# 其中面積那三個（+4.04% / −11.02% / −14.47%）甚至**不在任何 CSV 裡**，
+# 只活在 rtl_lowpower/README.md 的散文與 CHANGELOG。那正是 CLAUDE.md §5.4 禁止的，
+# 而它沒被抓到只是因為當時沒有任何被稽核的文件去引用它們。
+# 現在 m9_gate.py 會落 data/results_m9_area.csv 與 null 全距欄位，這裡把它們釘回去。
+LP = {r["state"]: r for r in load("results_m9_lowpower.csv")}
+BLK = {(r["state"], r["block"]): r for r in load("results_m9_blocks.csv")}
+AR = {r["config"]: r for r in load("results_m9_area.csv")}
+
+
+def _lp(state, col):
+    return float(LP[state][col])
+
+
+def _blk(state, blk, col):
+    return float(BLK[(state, blk)][col])
+
+
+def _drop_pct(blk):
+    """B0′ → B1′ 的降幅（%），負值代表下降。"""
+    b0, b1 = _blk("B0p", blk, "p_mw"), _blk("B1p", blk, "p_mw")
+    return 100 * (b1 - b0) / b0
+
+
+a("7.1", "B1' 總功耗 @3dB", _blk("B1p", "total", "p_mw"), 25.275, 3)
+a("7.1", "clock gating 總功耗降幅", -_drop_pct("total"), 42.7, 1)
+a("7.1", "traceback 降幅", -_drop_pct("u_tb"), 58.5, 1)
+a("7.1", "ACS 降幅", -_drop_pct("u_acs"), 14.5, 1)
+a("7.1", "min-PM 變動（純組合邏輯）", _drop_pct("u_minpm"), 0.1, 1)
+a("7.1", "B0' traceback 佔比", _blk("B0p", "u_tb", "share_pct"), 66.75, 2)
+a("7.1", "B1' traceback 佔比", _blk("B1p", "u_tb", "share_pct"), 48.4, 1)
+a("7.1", "RTL 改寫的面積代價", AR["Q3_W8_D32"]["rewrite_pct"], 4.04, 2)
+a("7.1", "B1' 面積 vs B0", -float(AR["Q3_W8_D32"]["b1p_vs_b0_pct"]), 11.02, 2)
+a("7.1", "純 clock gating 的面積效果", -float(AR["Q3_W8_D32"]["cg_only_pct"]),
+  14.47, 2)
+a("7.2", "B1' 跨 SNR 全距", _lp("B1p", "range_pct"), 1.47, 2)
+a("7.2", "σ_null", _lp("B0p", "sigma_null_mw"), 0.1415, 4)
+a("7.2", "null 全距", _lp("B0p", "null_range_pct"), 0.941, 3)
+a("7.2", "B0' 跨 SNR 全距", _lp("B0p", "range_pct"), 0.914, 3)
+a("7.2", "斜率", _lp("B0p", "slope_mw_per_db"), 0.0814, 4)
+a("7.3", "B0' 跨 SNR 絕對全距", _lp("B0p", "range_abs_mw"), 0.4043, 4)
+a("7.3", "B0' 純 seed 絕對全距", _lp("B0p", "null_range_abs_mw"), 0.4162, 4)
+a("7.3", "B1' 跨 SNR 絕對全距", _lp("B1p", "range_abs_mw"), 0.3734, 4)
+a("7.3", "B1' 純 seed 絕對全距", _lp("B1p", "null_range_abs_mw"), 0.3610, 4)
+a("7.3", "總功耗降幅（§7.3 引用）", -_drop_pct("total"), 42.7, 1)
+# README 的進度表也引用了這個降幅，覆蓋掃描要管得到它。
+a("進度", "clock gating 降幅（README）", -_drop_pct("total"), 42.7, 1, doc="readme")
+
 # ---- §4.1 機制：資訊 vs 活動 ----
 for snr, agree, tog in ((-2.0, 0.8982, 0.5011), (3.0, 1.0000, 0.5015),
                         (10.0, 1.0000, 0.5002)):
@@ -636,32 +685,48 @@ def _added_ts(path):
     return min(ts) if ts else None
 
 
-_PREREG = ["docs/falsification.md", "docs/energy_model.md"]
-_MEASURE = ["data/power.json", "data/saif"]
+# **(登記文件, 它所管轄的量測產物) 成對驗證，不是全域 max/min。**
+#
+# 第一版是「最晚的登記 < 最早的量測」。那對單一輪量測是對的，但 M9 一落地就壞了：
+# 把 `docs/lowpower_baseline.md`（2026-07-29 登記）加進清單，它會晚於
+# `data/power.json`（2026-07-14 量測），全域比較直接誤判紅燈。
+# **後果是 M9 的預先登記從來沒有被機械化驗證過**——它被排除在檢查之外，
+# 而排除的理由只是「加進去會紅燈」，這正好是最不該接受的理由。
+#
+# 改成配對之後，每一輪量測各自對自己的登記文件驗時序，互不干擾；
+# 新增里程碑時只要加一列，而不是被迫在「加進去會誤判」與「不驗」之間二選一。
+PREREG_PAIRS = [
+    (["docs/falsification.md", "docs/energy_model.md"],
+     ["data/power.json", "data/saif"]),
+    (["docs/lowpower_baseline.md"], ["data/power_m9.json"]),
+]
+_PREREG = [p for pre, _ in PREREG_PAIRS for p in pre]
 
-_pre_ts = {p: _added_ts(p) for p in _PREREG}
-_mea_ts = {p: _added_ts(p) for p in _MEASURE}
+PREREG_GAPS = []      # [(登記文件們, 間隔小時)]，供最後列印
+for _pre, _mea in PREREG_PAIRS:
+    _pre_ts = {p: _added_ts(p) for p in _pre}
+    _mea_ts = {p: _added_ts(p) for p in _mea}
+    for _p, _t in _pre_ts.items():
+        if _t is None:
+            fails.append(f"[prereg] 找不到 {_p} 的 commit —— 預先登記無法驗證")
+    for _p, _t in _mea_ts.items():
+        if _t is None:
+            fails.append(f"[prereg] 找不到 {_p} 的 commit —— 量測時間無法驗證")
+    if all(_pre_ts.values()) and all(_mea_ts.values()):
+        _latest_pre = max(_pre_ts.values())
+        _earliest_mea = min(_mea_ts.values())
+        if _latest_pre >= _earliest_mea:
+            fails.append(
+                f"[prereg] **預先登記沒有早於量測**（{', '.join(_pre)}）："
+                f"最晚的登記 {_latest_pre} >= 最早的量測 {_earliest_mea}。"
+                f"報告不得宣稱「事前登記」。")
+        else:
+            PREREG_GAPS.append((_pre, (_earliest_mea - _latest_pre) / 3600.0))
 
-for _p, _t in _pre_ts.items():
-    if _t is None:
-        fails.append(f"[prereg] 找不到 {_p} 的 commit —— 預先登記無法驗證")
-for _p, _t in _mea_ts.items():
-    if _t is None:
-        fails.append(f"[prereg] 找不到 {_p} 的 commit —— 量測時間無法驗證")
+# 第一對的間隔是報告與 README 引用的那個數字（21.2 小時），維持原本的變數名。
+PREREG_GAP_H = PREREG_GAPS[0][1] if PREREG_GAPS else None
 
-if all(_pre_ts.values()) and all(_mea_ts.values()):
-    _latest_pre = max(_pre_ts.values())
-    _earliest_mea = min(_mea_ts.values())
-    if _latest_pre >= _earliest_mea:
-        fails.append(
-            f"[prereg] **預先登記沒有早於量測**："
-            f"最晚的登記 {_latest_pre} >= 最早的量測 {_earliest_mea}。"
-            f"報告不得宣稱「事前登記」。")
-    else:
-        _gap_h = (_earliest_mea - _latest_pre) / 3600.0
-        PREREG_GAP_H = _gap_h     # 供最後列印
-
-# 工作區若有未提交的 falsification.md 改動，登記的時間戳就不再描述現在的內容
+# 工作區若有未提交的登記文件改動，登記的時間戳就不再描述現在的內容
 _dirty = subprocess.run(["git", "-C", ROOT, "status", "--porcelain", "--"]
                         + _PREREG, capture_output=True, text=True).stdout.strip()
 if _dirty:
@@ -881,15 +946,116 @@ else:
     fails.append("[thesis] docs/thesis.md 不存在——整併草稿應已建立")
 _n_thesis = len(_thesis_checks)
 
+# ---- §6 凍結文件的勘誤機制（雙向對帳 + 本體不可變）----
+#
+# CLAUDE.md §5.1 規定凍結文件不得回頭修改。這條紀律先前只是一句話：
+# 沒有任何東西擋得住有人就地改掉一份凍結文件，而那會讓它的時間戳失去證據力。
+# 這一節把它變成一條會紅燈的檢查。
+#
+# 做法分兩層：
+#   (a) 本體不可變：每份凍結文件在**第一個 ▼▼▼ 之前**的內容，必須逐位元組等同於
+#       該文件凍結 tag 裡的 blob。允許的唯一例外是尾端的純分隔符（空行與 ---），
+#       那是追加 band 時插入的，不改變任何一個字。
+#   (b) 雙向對帳：errata.md 索引裡的每一列，其目標文件必須有帶且帶內出現該 E-NN；
+#       反過來，任何文件裡出現的 E-NN 也必須在索引裡有列。
+#       單向檢查擋不住「加了帶卻忘了進索引」或「索引寫了卻沒有帶」。
+FROZEN_TAGS = {
+    "docs/trellis_convention.md": "m1-golden",
+    "docs/traceback_convention.md": "m1-golden",
+    "docs/wordlength_bound.md": "m1-golden",
+    "docs/energy_model.md": "m1-golden",
+    "docs/falsification.md": "m1-golden",
+    "docs/lowpower_baseline.md": "m9-lowpower",
+}
+BAND_MARK = "▼▼▼"
+
+# FEC_DOCS_ROOT：只影響 §6 **讀檔**的根目錄，git blob 一律仍從真正的 repo 取。
+# 這正是變異測試要的語意——把磁碟上的文件換成被改壞的副本，而對照的凍結 blob
+# 還是真的那一份，於是「本體被改動了」這條檢查會照常開火。
+# 沒有這個開關，要測試這道檢查就只能去改真正的凍結文件，那恰好是它禁止的事。
+DOCS_ROOT = os.environ.get("FEC_DOCS_ROOT", ROOT)
+
+
+def _split_band(text):
+    """切成 (凍結本體, 勘誤帶)。切點是**帶標記所在那一行的行首**，不是標記字元本身——
+    否則標題的 "# " 會被算進本體，看起來像本體多了內容。"""
+    i = text.find(BAND_MARK)
+    if i < 0:
+        return text, ""
+    j = text.rfind("\n", 0, i) + 1
+    return text[:j], text[j:]
+
+
+for _path, _tag in FROZEN_TAGS.items():
+    _full = open(os.path.join(DOCS_ROOT, _path), encoding="utf-8").read()
+    _body, _ = _split_band(_full)
+    _r = subprocess.run(["git", "-C", ROOT, "show", f"{_tag}:{_path}"],
+                        capture_output=True, text=True)
+    if _r.returncode != 0:
+        fails.append(f"[frozen] 取不到 {_tag}:{_path} —— 凍結本體無法對照")
+        continue
+    _frozen = _r.stdout
+    if not _body.startswith(_frozen):
+        fails.append(
+            f"[frozen] **{_path} 的凍結本體被改動了**（tag {_tag}）。"
+            f"凍結文件只能在檔尾追加 {BAND_MARK} 帶，本體一個字都不能動——"
+            f"改了它，這份文件的 commit 時間戳就不再描述它現在說的話。")
+        continue
+    # 本體與凍結 blob 之間只允許純分隔符（追加 band 時插入的）
+    _sep = _body[len(_frozen):]
+    if _sep.strip(" \t\n-"):
+        fails.append(
+            f"[frozen] {_path} 在凍結本體之後、{BAND_MARK} 帶之前多了內容："
+            f"{_sep.strip()[:80]!r} —— 那個位置只能是空行與 ---")
+
+_ERRATA_PATH = os.path.join(DOCS_ROOT, "docs", "errata.md")
+if not os.path.exists(_ERRATA_PATH):
+    fails.append("[errata] docs/errata.md 不存在 —— 勘誤索引是 §6 的前提")
+else:
+    _etxt = open(_ERRATA_PATH, encoding="utf-8").read()
+    # 索引表的每一列：| E-NN | `docs/xxx.md` | ...
+    _rows = re.findall(r"^\|\s*(E-\d+)\s*\|\s*`([^`]+)`\s*\|", _etxt, re.M)
+    if not _rows:
+        fails.append("[errata] docs/errata.md 的索引表解析不到任何一列")
+    _indexed = {}
+    for _eid, _doc in _rows:
+        _indexed.setdefault(_eid, _doc)
+    # (b1) 索引 -> 文件
+    for _eid, _doc in _indexed.items():
+        _p = os.path.join(DOCS_ROOT, _doc)
+        if not os.path.exists(_p):
+            fails.append(f"[errata] {_eid} 指向不存在的文件 {_doc}")
+            continue
+        _band = _split_band(open(_p, encoding="utf-8").read())[1]
+        if not _band:
+            fails.append(f"[errata] {_eid} 指向 {_doc}，但該文件沒有 {BAND_MARK} 勘誤帶")
+        elif _eid not in _band:
+            fails.append(f"[errata] {_eid} 在 {_doc} 的勘誤帶裡找不到"
+                         f" —— 索引與文件對不上")
+    # (b2) 文件 -> 索引
+    for _path in FROZEN_TAGS:
+        _band = _split_band(
+            open(os.path.join(DOCS_ROOT, _path), encoding="utf-8").read())[1]
+        for _eid in set(re.findall(r"E-\d+", _band)):
+            if _eid not in _indexed:
+                fails.append(f"[errata] {_path} 的勘誤帶出現 {_eid}，"
+                             f"但 docs/errata.md 的索引沒有這一列")
+            elif _indexed[_eid] != _path:
+                fails.append(f"[errata] {_eid} 在索引裡指向 {_indexed[_eid]}，"
+                             f"卻出現在 {_path} 的帶裡")
+
 print(f"assertions: {len(A)}   mismatches: {len(fails)}")
 print(f"thesis.md 承重數字：{_n_thesis} 條已釘回 CSV")
 for f in fails:
     print("  MISMATCH:", f)
 
 if not fails:
-    if "PREREG_GAP_H" in dir():
-        print(f"\n預先登記檢查：falsification.md / energy_model.md 的 commit 早於"
-              f"功耗量測 **{PREREG_GAP_H:.1f} 小時**（git 時間戳可驗證）。")
+    # 每一對登記/量測各自印出自己的間隔。M9 那一對是第一次被機械化驗證——
+    # 先前的全域 max/min 寫法讓它根本加不進來（加了就誤判紅燈）。
+    for _pre, _gap in PREREG_GAPS:
+        _names = " / ".join(os.path.basename(p) for p in _pre)
+        print(f"\n預先登記檢查：{_names} 的 commit 早於其量測 "
+              f"**{_gap:.1f} 小時**（git 時間戳可驗證）。")
     if "DSTAR_RECOMPUTED" in dir():
         print(f"d* 重算檢查：{DSTAR_RECOMPUTED} 個 d* 全部由 data/results.csv + "
               f"docs/energy_model.md 的凍結常數重算驗證（不是讀已算好的值）。")

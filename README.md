@@ -62,7 +62,7 @@ make m4       # M4：Tier B 浸泡（2.47 億個 stage）
 make m5       # M5：合成 -> gate-level -> SAIF -> OpenSTA -> d*
 make figures  # 重生所有圖表
 make report   # check_paper_numbers.py，必須輸出 mismatches: 0
-make mutate   # 變異測試：檢查器必須抓得到錯（6/6）
+make mutate   # 變異測試：檢查器必須抓得到錯（8/8）
 
 make all      # 以上全部
 make repro    # **冷跑**：刪光 data/ 從零重生，逐位元組驗證
@@ -70,7 +70,7 @@ make repro    # **冷跑**：刪光 data/ 從零重生，逐位元組驗證
 
 報告裡的每個數字都必須存在於 `data/gates.csv` 或 `data/results_m*.csv`，
 且可由 `scripts/` 底下的 script 重生。手貼的數字不接受（CLAUDE.md §5.4）。
-`make report` 把這條紀律機械化：**226 條 assertion，每一條都同時驗
+`make report` 把這條紀律機械化：**247 條 assertion，每一條都同時驗
 「值等於 CSV 算出的真值」與「該字串確實出現在報告中」**（防止斷言與文件脫節）。
 
 **`make repro` 會真的把 `data/` 刪光重生**，然後用 `git status` 檢查：除了
@@ -88,8 +88,11 @@ make repro    # **冷跑**：刪光 data/ 從零重生，逐位元組驗證
 | M3 RTL + Tier A | **完成**（C2 22,532 stages 零 mismatch，G6 負向 4/4，G7 通過，tag `m3-rtl`） |
 | M4 Tier B + G6 浸泡 | **完成**（2.47 億 stage 浸泡零 mismatch，tag `m4-tierb`） |
 | M5 PPA + 能量模型 | **完成**（8 個點 100% annotation，三條證偽條件全部裁決，tag `m5-ppa`） |
-| M6 報告 + 數字稽核 | **完成**（226 條 assertion / 0 mismatch，變異測試 6/6，tag `m6-report`） |
-| M7 完整冷跑（可重生性） | **完成**（`make repro` 刪光 `data/` 從零重生、逐位元組相同，tag `m7-repro`） |
+| M6 報告 + 數字稽核 | **完成**（數字稽核 0 mismatch，變異測試全數抓到，tag `m6-report`） |
+| M7 完整冷跑（可重生性） | **完成**（`make repro` 刪光 `data/` 從零重生、逐位元組相同，tag `m7-repro`）<br>範圍是 **M0–M5**；M9 落地後這個宣稱一度失效，由 M10 以更大的範圍重新坐實 |
+| M8 投稿前嚴審 | **完成**（六項被靜默放掉的驗收條件補齊，文獻檢索推翻兩項定位，tag `m8-audit`） |
+| M9 低功耗基準線 | **完成**（三態 B0/B0′/B1′，clock gating −42.7%，兩條事前預測被推翻，tag `m9-lowpower`） |
+| M10 可重生性修復 | **完成**（六處腐化修根因，冷跑 229 分涵蓋 M0–M5 + M9，tag `m10-repro2`） |
 
 **專案定案（2026-07-17）：規格書 §10 的六項 Definition of Done 全部達成並實測驗證。**
 已揭露的邊界（d\* 為上界、PPA 僅 full-parallel、ADC 敏感度線、折疊/post-route/memory-traceback 未做）
@@ -226,7 +229,7 @@ R² = 0.913——因為它是整條路徑上唯一不在最大熵的訊號，它
 
 ### M6：把「數字與資料一致」從人工目視升為機械保證
 
-`make report` 跑 `scripts/check_paper_numbers.py`：**226 條 assertion，mismatches: 0**。
+`make report` 跑 `scripts/check_paper_numbers.py`：**247 條 assertion，mismatches: 0**。
 每一條同時驗兩件事——(a) 值等於 CSV 算出的真值；(b) 該字串**確實出現在文件中**
 （防止斷言與文件脫節）。外加：
 
@@ -241,11 +244,11 @@ R² = 0.913——因為它是整條路徑上唯一不在最大熵的訊號，它
 - **帶單位的數字覆蓋掃描**：報告與 README 裡任何沒對回 CSV 的數字都會讓 `make report` 失敗。
 
 涵蓋 `docs/report.md` 與本 README，外加 **36 筆 gate 記錄**（30 個有判準的 gate + 6 筆觀測）的完整性檢查。
-（連「226 條」這句話本身都被驗——README 說幾條就必須真的有幾條。這條會在每次新增 assertion 時
+（連「246 條」這句話本身都被驗——README 說幾條就必須真的有幾條。這條會在每次新增 assertion 時
 壞掉，那正是它的用途：逼 README 跟著更新，而不是慢慢變成一句過期的自我吹噓。）
 
 `make mutate` 是**檢查器自己的變異測試**——一個抓不到錯的檢查器沒有價值。
-注入 6 種已知錯誤，**6/6 全部抓到**。它抓到過檢查器的三個真洞，其中最嚴重的是
+注入 8 種已知錯誤，**8/8 全部抓到**。它抓到過檢查器的三個真洞，其中最嚴重的是
 **coverage gap 不影響 exit code**（於是改壞一個數字，CI 會綠燈放行）。
 
 ### 誠實的界線：**沒有**驗證的東西

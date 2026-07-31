@@ -34,6 +34,21 @@
 
 **頭條主張**：總能量 = 發射能量 + 解碼能量。強碼（K=7 soft Viterbi）節省約 5 dB 發射功率，但需支付解碼器功耗；因此存在一個臨界距離 d\*，**低於 d\* 時未編碼傳輸的每交付位元總能量反而較低**。本專案量測 d\* 的位置，以及 LLR 量化位寬（3–6 bits）如何移動 d\*。
 
+> ### ⚠ 本節的頭條主張已於 M8 依文獻檢索下修（2026-07-29，**原文保留**）
+>
+> **d\* 不能當頭條，須降為 motivation。** 臨界距離有直接前案：
+> Howard / Schlegel / Iniewski, *EURASIP JWCN* 2006（doi 10.1155/WCN/2006/74812）
+> 已推導 `d_CR`，且涵蓋多個解碼器實作（含類比）、跨環境、跨寬頻率範圍——
+> **覆蓋面廣於本專案的單一組態**。本專案的 d\* 應定位為「用自己的量測鏈路把它重算一遍」，
+> 而不是新發現。
+>
+> **「固定排程 Viterbi 的功耗與 SNR 幾乎無關」是背景常識，不是本文的發現。**
+> 它在 adaptive-decoding 文獻裡是前提（原文：decoding effort "independent of SNR
+> and fidelity requirements"）。主張須從「我們發現 X」改寫為
+> 「**X 已知；本文的貢獻是機制、可計算的界、與功耗簽核的流程後果**」。
+> 同時 `docs/report.md` §4.4 未範圍化的推廣已證實為錯——adaptive / T-algorithm
+> 類解碼器在低雜訊下省電達 97%，其活動依定義隨 SNR 變。
+
 **誠實定位**：此 crossover 在低功耗 WSN/BAN 文獻中是已知效應。本專案的貢獻不是發現它，而是用一條**自建、可復現、逐層 bit-accurate 驗證**的鏈路把它重新量出來，並量化「字寬 → d\*」的關係。
 
 **證偽條件（先寫死，不得事後修改）**：在 η_PA ∈ [0.1, 0.5]、2.4 GHz free-space 或 indoor path loss 模型的合理參數範圍內，若 d\* < 1 公尺或不存在，主張即告失敗，報告需如實記載。
@@ -598,6 +613,11 @@ fec-cosim/
 | **M4（週 5–6）** | Tier B + G6 浸泡 | 激勵 manifest 的 SHA-256 對帳 + 解碼位元 XOR 零 mismatch；G6 assertion 在 10⁸ stages 的低 SNR 浸泡下不誤觸發。 |
 | **M5（週 6–8）** | PPA + 能量模型 | Sky130 合成收斂；SAIF 功耗**分 SNR、分區塊（ACS vs traceback）**產出；功耗收斂圖；d\* 圖完成；`docs/falsification.md` 的三條條件逐一裁決（成立或不成立，如實記錄）。 |
 | **M6（週 8–10）** | 報告 | `data/results.csv` 為唯一來源；`check_paper_numbers.py` 回報 `mismatches: 0`；與既有通訊模擬器的 Pareto 前緣圖接上。 |
+
+| **M7** | 完整冷跑（可重生性） | `make repro` 刪光 `data/` 從零重生，除 `meta_*.json` 外逐位元組相同。**範圍是 M0–M5**；M9 落地後這個宣稱一度失效，見 M10。tag `m7-repro` |
+| **M8** | 投稿前嚴審（規格書外，2026-07-29） | 六項被靜默放掉的驗收條件補齊（含 §9 M6 的 Pareto 圖與 `data/results.csv`）；文獻檢索推翻兩項定位（見 §0 的修訂框）。tag `m8-audit` |
+| **M9** | 低功耗基準線（規格書外，2026-07-30） | 判準與事前預測凍結於 `docs/lowpower_baseline.md`（量測前 commit）；三態 B0/B0′/B1′ 各先過 gate-level C2 才量功耗；**P1 與 P3 兩條事前預測被推翻**，P2 未解析，**P4/P5 因 B2 未建置而未裁決**。tag `m9-lowpower` |
+| **M10** | 可重生性修復（規格書外，2026-07-31） | 六處腐化修根因；`make gates` 首次涵蓋全部 36 列；冷跑 229 分**同時涵蓋 M0–M5 與 M9**，除 `meta_*.json` 與 `vectors/MANIFEST.json` 的 metadata 外逐位元組相同。tag `m10-repro2` |
 
 **（M6 之後，選配）** Polar SC stretch goal 才允許開工。
 

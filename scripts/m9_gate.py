@@ -18,13 +18,31 @@ t 檢定另列為補充。這與 G4b 的處理方式一致（`docs/fec_viterbi_c
 import json
 import math
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from scripts.gates import DATA, Run  # noqa: E402
+import scripts.m9_sweep as M9  # noqa: E402
+from scripts.gates import DATA, REPO, Run  # noqa: E402
 
 SXX = 10.0        # Σ(x−x̄)² for SNR = 1,2,3,4,5 dB
+
+SYNTH = os.path.join(REPO, "ppa", "out", "synth")
+
+
+def _area(tag):
+    """從 Yosys 的 stat 檔取 top module 的總面積（µm²）。找不到回 None。
+
+    只取 `Chip area for top module` 那一行——`Chip area for module X` 是該模組
+    **自己的 cell**、不含子模組，拿它當總面積會少算一個數量級（見 ppa/synth.py 的註解）。
+    """
+    p = os.path.join(SYNTH, f"stat_{tag}.txt")
+    if not os.path.exists(p):
+        return None
+    m = re.search(r"Chip area for top module '\\viterbi_top':\s*([\d.]+)",
+                  open(p, encoding="utf-8", errors="replace").read())
+    return float(m.group(1)) if m else None
 
 # docs/lowpower_baseline.md §2 的事前預測（量測前 commit，不得修改）
 PREREG = {
@@ -243,6 +261,13 @@ def main():
             "range_pct": round(rng, 4), "range_abs_mw": round(max(ys) - min(ys), 4),
             "slope_mw_per_db": round(slope, 5), "r2": round(r2, 4),
             "sigma_null_mw": round(nd["sd"], 5) if nd else None,
+            # null 分布的全距也要落成欄位。報告 §7.3 的核心論證是
+            # 「跨 SNR 的變異 == 純 seed 的變異」，那需要**兩邊的全距同時可比**；
+            # 先前只有跨 SNR 的 range_abs_mw 進了 CSV，純 seed 那一邊只活在
+            # power_m9_null.json 與 gate 的敘述字串裡，對不回任何欄位。
+            "null_range_pct": round(nd["range_pct"], 4) if nd else None,
+            "null_range_abs_mw": (round(max(nd["p_mw"]) - min(nd["p_mw"]), 4)
+                                  if nd else None),
             "t_slope": (round(slope / (nd["sd"] / math.sqrt(SXX)), 3)
                         if nd else None),
             "frozen_verdict": verdict(rng, r2),
@@ -259,6 +284,37 @@ def main():
                               "p_mw": round(v * 1e3, 4),
                               "share_pct": round(100 * v / p["p_total_w"], 2)})
     run.csv("results_m9_blocks.csv", list(brows[0].keys()), brows)
+
+    # ---- 面積的兩因子拆解 ----
+    #
+    # M9 的面積結論（B0→B0′ +4.04% 是 RTL 改寫的代價、B0′→B1′ −14.47% 才是純 clock gating）
+    # 先前**只存在於 `rtl_lowpower/README.md` 的散文與 CHANGELOG 裡，不在任何 CSV**。
+    # 那違反 CLAUDE.md §5.4「報告裡的每個數字都必須存在於 data/ 且可由 script 重生」，
+    # 而它一直沒被抓到，只是因為報告當時根本沒有 M9 章節去引用它們。
+    #
+    # 這裡不新增 gate（面積不是 pass/fail 判準，凍結文件沒有替它訂門檻），
+    # 只把已經算得出來的數字落成證據檔，讓 check_paper_numbers.py 管得到。
+    arows = []
+    for Q, W, D, _clip in [M9.MAIN] + M9.OTHERS:
+        base = _area(f"Q{Q}_W{W}_D{D}")
+        rtlv = _area(f"Q{Q}_W{W}_D{D}_rtlv")
+        cg = _area(f"Q{Q}_W{W}_D{D}_cg_rtlv")
+        if not (base and rtlv and cg):
+            continue
+        arows.append({
+            "config": f"Q{Q}_W{W}_D{D}",
+            "b0_um2": round(base, 1),
+            "b0p_um2": round(rtlv, 1),
+            "b1p_um2": round(cg, 1),
+            # RTL 改寫本身的代價（混淆因子）
+            "rewrite_pct": round(100 * (rtlv - base) / base, 2),
+            # 對外報的降幅（相對於未改寫的 B0）
+            "b1p_vs_b0_pct": round(100 * (cg - base) / base, 2),
+            # 純 clock gating 的效果（控制掉改寫之後）
+            "cg_only_pct": round(100 * (cg - rtlv) / rtlv, 2),
+        })
+    if arows:
+        run.csv("results_m9_area.csv", list(arows[0].keys()), arows)
 
     print("\n=== 三態的功耗 vs SNR")
     for r in rows:

@@ -48,7 +48,7 @@ help:
 	@echo "  交付："
 	@echo "    make figures   重生所有圖表"
 	@echo "    make report    check_paper_numbers.py（須 mismatches: 0）"
-	@echo "    make mutate    變異測試：檢查器必須抓得到錯（6/6）"
+	@echo "    make mutate    變異測試：檢查器必須抓得到錯（8/8）"
 	@echo ""
 	@echo "  整條鏈路："
 	@echo "    make all       env -> m1 -> m2 -> m3 -> m4 -> m5 -> m9 -> figures -> report"
@@ -186,7 +186,7 @@ gates:
 report:
 	@$(ENV) $(PY) scripts/check_paper_numbers.py
 
-# 一個抓不到錯的檢查器沒有價值。注入 6 種已知錯誤，必須每一種都抓到。
+# 一個抓不到錯的檢查器沒有價值。注入 8 種已知錯誤，必須每一種都抓到。
 mutate:
 	@bash scripts/mutate_check.sh
 
