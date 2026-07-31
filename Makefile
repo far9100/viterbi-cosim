@@ -29,7 +29,8 @@ BUDGET ?= 420
 GUARD  ?= 60
 
 .PHONY: help test env m1 freeze m2 sweep m3 m4 ber m5 ppa fmax figures \
-        gates report mutate all repro lint tier-a clean distclean
+        gates report mutate all repro lint tier-a clean distclean \
+        m9 m9-verify m9-sweep m9-null
 
 help:
 	@echo "fec-cosim —— K=7 soft Viterbi 的 bit-accurate co-simulation"
@@ -122,10 +123,29 @@ fmax:
 	@$(ENV) $(PY) ppa/sta.py
 
 # ---------------------------------------------------------------- 交付
+# ---------------------------------------------------------------- M9：低功耗基準線
+#
+# 順序不可顛倒（docs/lowpower_baseline.md §4.1）：**先過 C2，才准量功耗**。
+# clock gating 的第一版正是死在 C2 —— ICG 關掉時脈時同步 reset 進不去，
+# 而症狀偽裝成「收到 0 個輸出」，功耗流程照樣會產出漂亮的數字。
+m9-verify:
+	@$(ENV) $(PY) ppa/verify_cg.py
+
+m9-sweep: m9-verify
+	@$(ENV) $(PY) scripts/m9_sweep.py
+
+m9-null:
+	@$(ENV) $(PY) scripts/m9_null.py
+
+m9: m9-sweep m9-null
+	@$(ENV) $(PY) scripts/m9_gate.py
+
 figures:
 	@$(ENV) $(PY) scripts/plot_m1.py
 	@$(ENV) $(PY) scripts/plot_m2.py
 	@$(ENV) $(PY) scripts/plot_m5.py
+	@$(ENV) $(PY) scripts/plot_pareto.py
+	@$(ENV) $(PY) scripts/plot_m9.py
 
 # 所有已上線的 known-answer 閘門 -> data/gates.csv
 # （第一版漏掉 m4 與 m5 —— 那正是這份 Makefile 之前在說謊的一部分）

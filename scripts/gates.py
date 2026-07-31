@@ -129,8 +129,18 @@ class Run:
             "milestone": self.milestone,
         } for label, passed, measured, expected, tol, detail in self.checks]
 
-        keys = {(r["milestone"], r["gate"]) for r in new}
-        merged = [r for r in old if (r["milestone"], r["gate"]) not in keys] + new
+        # **以 milestone 為單位整批取代，不是以 (milestone, gate) 為鍵逐列取代。**
+        #
+        # 逐列取代有一個已經咬過一次的破口（見 CHANGELOG `2026-07-16-08`）：
+        # gate **改名**之後，舊名字那一列不會被任何新列取代，於是留下孤兒，把總數灌大。
+        # 當時是 M2 的 C2′ 改名（…L2-GPU… -> …L2-torch…）把 26 灌成 27；
+        # M9 開發期間又發生一次（M9-7 改名後舊列殘留）。**同一個破口咬兩次，就該修根因。**
+        #
+        # 根因是「一個 run 只擁有自己產生的那幾列」這個假設太弱：本專案每個 milestone
+        # 就是一支 script，它產生該 milestone 的**完整集合**。所以正確的語意是
+        # 「這個 run 擁有這個 milestone 的全部列」——整批取代之後，
+        # 孤兒在結構上不可能存在，不必再靠人去發現。
+        merged = [r for r in old if r["milestone"] != self.milestone] + new
 
         # 依 milestone 穩定排序，讓 gates.csv 的列序是**確定的**（M0..M5），與 gate 的執行順序無關。
         # 否則單獨重跑某個里程碑的 gate 會用 replace-by-key 把它的列搬到檔尾，讓列序漂移；

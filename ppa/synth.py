@@ -37,22 +37,69 @@ BLOCKS = ["u_ctrl", "u_bmu", "u_acs", "u_minpm", "u_tb"]
 OUT = os.path.join(REPO, "ppa", "out", "synth")
 
 
-def synth(Q, W, D, ninfo=1024, period_ps=10000):
-    """合成一組組態。回傳 (netlist 路徑, stat 解析結果)。"""
-    tag = f"Q{Q}_W{W}_D{D}"
+# ---- clock gating（M9 / docs/lowpower_baseline.md 的 B1 態）----
+#
+# M5 的整條流程**沒有任何 clock gating**——只有 synth / dfflibmap / abc -liberty，
+# 而 abc 只做技術映射。那條扇出 8683 個 sink 的 enable 網就是直接症狀。
+# 由於 report.md §4 的負面結果是在這個未最佳化的設計上量到的，
+# 「把與 SNR 無關的大分母縮小之後 null 還在不在」是必須回答的問題。
+#
+# Sky130 HD 的 ICG（integrated clock gating）cell：
+#   sky130_fd_sc_hd__dlclkp_1   clock_gating_integrated_cell : "latch_posedge"
+#     CLK  = clock_gate_clock_pin
+#     GATE = clock_gate_enable_pin（active high）
+#     GCLK = clock_gate_out_pin
+# 由 liberty 實地查得（不是從文件抄的），area = 17.5168 µm²。
+ICG_CELL = "sky130_fd_sc_hd__dlclkp_1"
+ICG_PINS = "GATE:CLK:GCLK"
+
+# 只 gate ≥ 64 個 flop 的群組：把控制 FSM（數十個 flop）留在 gating 之外。
+# 64 = 一個 trellis stage 的狀態數，也正好把 traceback（64×D）、PM（64×W）、
+# surv_r（64）納入，而把 bm_r（4×(Q+1)）與 ctrl 排除。
+CG_MIN_NET = 64
+
+
+def synth(Q, W, D, ninfo=1024, period_ps=10000, clock_gating=False,
+          rtl_dir="/work/rtl", tag_suffix=""):
+    """合成一組組態。回傳 (netlist 路徑, stat 解析結果)。
+
+    clock_gating=False 為 B0（M5 的現況，數字必須逐位元組不變）；
+    True 為 B1，插入 ICG。兩態的 RTL 源碼、激勵、SAIF→OpenSTA 路徑完全相同，
+    只有這一個合成選項不同 —— 差異才能歸因於最佳化本身。
+
+    rtl_dir / tag_suffix：讓「RTL 改寫是否擾動 B0」這個問題可以被**實測**回答，
+    而不是用推理保證。改寫後的 RTL 先合成到另一個 tag，與現行 B0 netlist 逐一比對
+    cell 組成與面積；只有證實不受擾動，才允許把改寫合併回 `rtl/`。
+    """
+    tag = f"Q{Q}_W{W}_D{D}" + ("_cg" if clock_gating else "") + tag_suffix
     os.makedirs(OUT, exist_ok=True)
     ys = os.path.join(OUT, f"syn_{tag}.ys")
     net = f"/work/ppa/out/synth/net_{tag}.v"
     stat = f"/work/ppa/out/synth/stat_{tag}.txt"
+    # clockgate 必須在 dfflibmap **之前**跑：它要辨識的是通用的 $_DFFE_* cell，
+    # dfflibmap 之後 FF 已經被映射成 liberty cell，pass 就認不出 enable 腳了。
+    #
+    # **已知陷阱（C2 抓到的）**：本 pass 從 FF 的 CE 腳推導 enable，而**同步 reset
+    # 不在 CE 裡**（Yosys 把它折進 D 路徑）。於是 reset 拉高但 enable 為低時，
+    # 時脈被關掉、reset 永遠進不去，設計卡在 X。症狀極隱蔽：TB 只在 out_valid 為 1
+    # 時檢查 X，而 out_valid 自己就是 X ⇒ 回報「0 個輸出」而不是「X 錯誤」。
+    # 因此要 clock gate 的 RTL 必須把 reset 寫進 enable 條件（`if (rst || en)`）。
+    #
+    # `-min_net_size` 把**小的暫存器群組排除在 gating 之外**。這不是效能微調，是正確性：
+    # 控制 FSM（`rtl/ctrl.sv`，數十個 flop）的 enable 由它自己的狀態導出，
+    # 一旦連它也被 gate，reset 就進不去，整個設計卡死。而它本來就小到 gate 了也省不了功耗。
+    # 真正值得 gate 的是 traceback 的 64×D 與 PM 的 64×W 兩組暫存器庫。
+    cg = (f"clockgate -min_net_size {CG_MIN_NET} -pos {ICG_CELL} {ICG_PINS}\n"
+          if clock_gating else "")
 
-    files = " \\\n  ".join(f"/work/rtl/{f}" for f in RTL)
+    files = " \\\n  ".join(f"{rtl_dir}/{f}" for f in RTL)
     with open(ys, "w") as f:
         f.write(f"""\
 # 由 ppa/synth.py 產生。Q={Q} W={W} D={D}
 #
 # -DSYNTHESIS：把 rtl/viterbi_top.sv 裡的 G6 影子（`ifndef SYNTHESIS）整段排除。
 #              那是模擬用的哨兵，不是要出貨的邏輯。
-read_verilog -sv -DSYNTHESIS -I/work/rtl \\
+read_verilog -sv -DSYNTHESIS -I{rtl_dir} \\
   {files}
 
 chparam -set Q {Q} -set W {W} -set D {D} -set NINFO {ninfo} viterbi_top
@@ -61,7 +108,7 @@ hierarchy -check -top viterbi_top
 # **不加 -flatten**：功耗要分區塊，必須保留階層
 synth -top viterbi_top
 
-dfflibmap -liberty {LIB}
+{cg}dfflibmap -liberty {LIB}
 abc        -liberty {LIB} -D {period_ps}
 
 setundef -zero

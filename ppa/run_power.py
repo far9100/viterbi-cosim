@@ -34,9 +34,21 @@ CONFIGS = [
 ]
 
 
-def point(Q, W, D, clip, snr, frames=FRAMES):
-    tag = f"Q{Q}_W{W}_D{D}"
-    key = f"{tag}_snr{snr}_f{frames}"
+def point(Q, W, D, clip, snr, frames=FRAMES, variant="", seed=None):
+    """一個 (組態, SNR) 點的 gate-level 功耗。
+
+    variant：`""` = B0（M5 的現況）；`"_cg_rtlv"` = B1′（`rtl_lowpower/` + clock gating）。
+    variant 進 tag ⇒ **快取鍵與 netlist 路徑天然分開**，B0 的既有快取、SAIF 與
+    已發表數字完全不受影響（`docs/lowpower_baseline.md` §4.3）。
+
+    seed：`None` 用 `make_stimulus` 的預設值（= M5 用的那一個，數字必須不變）。
+    給值時進快取鍵，用來跑**同一個 SNR 的獨立重複**——那是建立 null 分布的唯一方法。
+    `docs/lowpower_baseline.md` §3 把它列為套用 2% 門檻的前提：
+    M5 的收斂測試改變的是「同一段激勵的長度」，不是獨立重複，所以它證明不了
+    「1.0% 是雜訊」。沒有 null 分布，跨 SNR 的變動就沒有東西可以比。
+    """
+    tag = f"Q{Q}_W{W}_D{D}{variant}"
+    key = f"{tag}_snr{snr}_f{frames}" + (f"_s{seed}" if seed is not None else "")
     cp = os.path.join(CACHE, f"{key}.json")
     if os.path.exists(cp):
         with open(cp) as f:
@@ -45,11 +57,18 @@ def point(Q, W, D, clip, snr, frames=FRAMES):
     netlist = os.path.join(REPO, "ppa", "out", "synth", f"net_{tag}.v")
     vvp, n_cells = P.build_gl(tag, netlist, Q, W, D, P.NINFO)
 
-    sd = os.path.join(P.OUT, f"stim_{tag}_{snr}")
-    sp, dp, T = P.make_stimulus(Q, W, D, clip, snr, sd)
+    sd = os.path.join(P.OUT, f"stim_{tag}_{snr}"
+                      + (f"_s{seed}" if seed is not None else ""))
+    kw = {} if seed is None else {"seed": seed}
+    sp, dp, T = P.make_stimulus(Q, W, D, clip, snr, sd, **kw)
 
     t0 = time.time()
-    saif, ok, n_nets, dt_sim, simout = P.run_saif(tag, vvp, sp, dp, T, snr,
+    # **seed 必須進 SAIF 的檔名。** `run_saif` 用 tag 組檔名（`act_{tag}_snr{snr}_f{frames}`），
+    # 不帶 seed 的話 8 個獨立重複會互相覆寫 —— 功耗數字當下是對的，但歸檔下來的 SAIF
+    # 與所報的功耗對不起來。這正是 `2026-07-14-46` 修過的那個歸檔碰撞 bug
+    # （當時是 frames 沒進檔名），不重新引入。
+    saif_tag = tag + (f"_s{seed}" if seed is not None else "")
+    saif, ok, n_nets, dt_sim, simout = P.run_saif(saif_tag, vvp, sp, dp, T, snr,
                                                   frames=frames, depth=DUMP_DEPTH)
     if not ok:
         raise RuntimeError(f"gate-level C2 失敗 ({key}):\n{simout[-1200:]}")
@@ -58,7 +77,7 @@ def point(Q, W, D, clip, snr, frames=FRAMES):
     pr = P.parse_power(sta)
 
     row = {"tag": tag, "Q": Q, "W": W, "D": D, "clip": clip, "snr_db": snr,
-           "frames": frames, "n_stages": frames * T,
+           "seed": seed, "frames": frames, "n_stages": frames * T,
            "annot_pct": pr.get("annot_pct", 0.0),
            "n_nets": n_nets, "saif_mb": round(os.path.getsize(saif) / 1e6, 1),
            "sim_s": round(dt_sim, 1), "wall_s": round(time.time() - t0, 1)}

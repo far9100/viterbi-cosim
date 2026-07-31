@@ -1,0 +1,13 @@
+state,variant,block,p_mw,share_pct
+B0p,_rtlv,total,44.1433,100.0
+B0p,_rtlv,u_tb,29.4648,66.75
+B0p,_rtlv,u_acs,11.2151,25.41
+B0p,_rtlv,u_minpm,3.0372,6.88
+B0p,_rtlv,u_bmu,0.2603,0.59
+B0p,_rtlv,u_ctrl,0.1661,0.38
+B1p,_cg_rtlv,total,25.275,100.0
+B1p,_cg_rtlv,u_tb,12.2224,48.36
+B1p,_cg_rtlv,u_acs,9.5856,37.93
+B1p,_cg_rtlv,u_minpm,3.0406,12.03
+B1p,_cg_rtlv,u_bmu,0.2603,1.03
+B1p,_cg_rtlv,u_ctrl,0.1661,0.66
