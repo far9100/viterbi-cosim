@@ -24,12 +24,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import scripts.design as DESIGN  # noqa: E402
 from scripts.gates import REPO  # noqa: E402
 
 LIB = "/OpenROAD-flow-scripts/flow/platforms/sky130hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib"
 
-RTL = ["bmu.sv", "acs_butterfly.sv", "acs_array.sv", "minpm.sv",
-       "traceback.sv", "ctrl.sv", "viterbi_top.sv"]
+# 單一來源：scripts/design.py
+RTL = DESIGN.MODULES
 
 # viterbi_top 底下的區塊（netlist 裡的實例名）
 BLOCKS = ["u_ctrl", "u_bmu", "u_acs", "u_minpm", "u_tb"]
@@ -248,8 +249,10 @@ def parse_stat(path, tag, Q, W, D):
 
 
 def main():
-    # M2 選出的 winner（data/m2_winners.csv）
-    winners = [(6, 12, 64), (6, 12, 32), (4, 10, 64), (3, 8, 32)]
+    # M2 選出的 winner（單一來源：scripts/design.py）。
+    # 順序沿用 ORDER_SYNTH —— 改順序會改變合成 log 的順序。
+    winners = [(Q, W, D) for Q, W, D, _clip
+               in DESIGN.winners(DESIGN.ORDER_SYNTH)]
 
     rows = []
     for Q, W, D in winners:

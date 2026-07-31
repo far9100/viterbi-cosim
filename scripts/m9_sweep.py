@@ -27,6 +27,7 @@ import ppa.power as P  # noqa: E402
 from ppa.run_power import (DUMP_DEPTH, FRAMES, SNR_SWEEP,  # noqa: E402
                            evidence_only, point)
 from ppa.synth import synth  # noqa: E402
+import scripts.design as DESIGN  # noqa: E402
 from scripts.gates import DATA, REPO  # noqa: E402
 
 # 時間預算：harness 有 10 分鐘上限，而 32 個閘級點要跑數小時。
@@ -39,12 +40,13 @@ BUDGET_S = float(os.environ.get("BUDGET", "460"))
 
 LP_RTL = "/work/rtl_lowpower"
 
-# 主掃描組態：與 M5 相同（功耗 vs SNR 的交付結果就是在它上面量的）
-MAIN = (4, 10, 64, 2.5)
-# 另外三個組態只量 3 dB，用來看面積/功耗的降幅是否一致
-OTHERS = [(6, 12, 64, 3.0), (6, 12, 32, 3.0), (3, 8, 32, 2.0)]
+# 單一來源：scripts/design.py。ORDER_POWER 的第一個就是主掃描組態
+# （與 M5 相同，功耗 vs SNR 的交付結果就是在它上面量的），其餘三個只量 3 dB。
+_W = DESIGN.winners(DESIGN.ORDER_POWER)
+MAIN = _W[0]
+OTHERS = _W[1:]
 
-VARIANTS = [("_rtlv", False), ("_cg_rtlv", True)]      # B0' / B1'
+VARIANTS = DESIGN.VARIANTS                             # B0' / B1'
 
 
 def ensure_netlists():

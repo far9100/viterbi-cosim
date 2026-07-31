@@ -12,6 +12,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ppa.power as P  # noqa: E402
+import scripts.design as DESIGN  # noqa: E402
 from scripts.gates import DATA, REPO  # noqa: E402
 
 CACHE = os.path.join(DATA, "cache_m5")
@@ -25,13 +26,11 @@ DUMP_DEPTH = 4
 FRAMES = 3
 
 SNR_SWEEP = [1.0, 2.0, 3.0, 4.0, 5.0]
-CONFIGS = [
-    # (Q, W, D, clip, [SNRs])
-    (4, 10, 64, 2.5, SNR_SWEEP),      # 主掃描：功耗 vs SNR（交付結果）
-    (6, 12, 64, 3.0, [3.0]),
-    (6, 12, 32, 3.0, [3.0]),
-    (3,  8, 32, 2.0, [3.0]),
-]
+# 單一來源：scripts/design.py。第一個（主掃描組態）掃全部 SNR，其餘只量 3 dB。
+# 順序即 data/power.json 的 points 順序，不能動。
+CONFIGS = [(Q, W, D, clip, SNR_SWEEP if i == 0 else [3.0])
+           for i, (Q, W, D, clip)
+           in enumerate(DESIGN.winners(DESIGN.ORDER_POWER))]
 
 
 def evidence_only(r):

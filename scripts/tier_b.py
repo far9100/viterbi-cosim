@@ -22,6 +22,7 @@ from multiprocessing import Pool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import scripts.design as DESIGN  # noqa: E402
 from scripts.gates import DATA, REPO  # noqa: E402
 from scripts.gen_stimulus import generate, verify  # noqa: E402
 
@@ -33,13 +34,8 @@ MANIFESTS = os.path.join(DATA, "tierb_manifests")
 RTL = ["rtl/bmu.sv", "rtl/acs_butterfly.sv", "rtl/acs_array.sv", "rtl/minpm.sv",
        "rtl/traceback.sv", "rtl/ctrl.sv", "rtl/viterbi_top.sv"]
 
-# M2 選出的 winner（data/m2_winners.csv）
-WINNERS = [
-    (6, 12, 64, 3.0),
-    (6, 12, 32, 3.0),
-    (4, 10, 64, 2.5),
-    (3,  8, 32, 2.0),
-]
+# 單一來源：scripts/design.py。順序即 data/results_m4.csv 的列序，不能動。
+WINNERS = DESIGN.winners(DESIGN.ORDER_SYNTH)
 # 低 SNR 是 G6 assertion 浸泡的重點：PM spread 在那裡最大。
 SNRS = [1.0, 3.0, 5.0]
 FRAMES = int(os.environ.get("TIERB_FRAMES", "20000"))   # 每點 ~2x10^7 bits

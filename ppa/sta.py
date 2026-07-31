@@ -57,6 +57,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import scripts.design as DESIGN  # noqa: E402
 from scripts.gates import DATA, REPO  # noqa: E402
 
 PLAT = "/OpenROAD-flow-scripts/flow/platforms/sky130hd"
@@ -73,7 +74,9 @@ SYNTH_TARGET_NS = 10.0
 UTIL = 45          # floorplan 利用率 (%)
 DENSITY = 0.60     # global placement 的目標密度
 
-CONFIGS = [(4, 10, 64), (6, 12, 64), (6, 12, 32), (3, 8, 32)]
+# 單一來源：scripts/design.py。**順序是有意義的** ——
+# data/results_m5_fmax.csv 的列序就是這個順序，改它會破壞冷跑的逐位元組判準。
+CONFIGS = [(Q, W, D) for Q, W, D, _clip in DESIGN.winners(DESIGN.ORDER_POWER)]
 
 
 def tcl_for(tag, netlist_rel, out_net_rel, period_ns):
