@@ -92,7 +92,9 @@ step() {
     exit 1
   fi
   local dt=$(( $(date +%s) - ts ))
-  TIMES+=("$name $dt")
+  # 用 | 當分隔符，不用空格：步驟名本身含空格（"M0 env"、"M1 golden"），
+  # 以空格切會把名字拆成兩個欄位，秒數就跑到名字的第二個字上去了。
+  TIMES+=("$name|$dt")
   echo "--- [$name] 完成（$dt 秒）"
 }
 
@@ -116,8 +118,7 @@ step "mutate"    make mutate
 echo
 echo "重生完成，共 $(( ($(date +%s) - t0) / 60 )) 分。各步驟耗時："
 for e in "${TIMES[@]}"; do
-  set -- $e
-  printf "  %-10s %6d 秒\n" "$1" "$2"
+  printf "  %-12s %6d 秒\n" "${e%%|*}" "${e##*|}"
 done
 
 # ---------------------------------------------------------------- 驗收
