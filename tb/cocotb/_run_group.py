@@ -56,7 +56,10 @@ def main():
         build_dir=workdir, build_args=build_args, always=True,
     )
     runner.test(
-        hdl_toplevel="viterbi_dbg", test_module="test_viterbi",
+        # 測試模組可切換：Tier A 現在有兩支 testbench —— `test_viterbi`（C2，資料路徑）
+        # 與 `test_ctrl`（控制路徑：stall / frame_done / 幀中 reset / 背靠背）。
+        hdl_toplevel="viterbi_dbg",
+        test_module=os.environ.get("FEC_TEST_MODULE", "test_viterbi"),
         build_dir=workdir,
         test_dir=os.path.join(REPO, "tb", "cocotb"),
         extra_env=dict(os.environ),

@@ -42,7 +42,8 @@ def groups(safe):
     return dict(g)
 
 
-def run_one(sim, Q, W, D, vec_names, workdir, assertions=True):
+def run_one(sim, Q, W, D, vec_names, workdir, assertions=True,
+            module="test_viterbi"):
     """建置 + 跑一組。回傳 (通過?, **含模擬器在內**的完整輸出)。
 
     一定要用 subprocess + capture_output：cocotb 的 runner 把模擬器當子行程啟動，
@@ -56,6 +57,7 @@ def run_one(sim, Q, W, D, vec_names, workdir, assertions=True):
     env.update({
         "FEC_REPO": REPO,
         "FEC_SIM": sim,
+        "FEC_TEST_MODULE": module,
         "FEC_Q": str(Q), "FEC_W": str(W), "FEC_D": str(D),
         "FEC_NINFO": str(NINFO),
         "FEC_VECTORS": ",".join(vec_names),
@@ -78,6 +80,11 @@ def main():
     if mode == "g7":
         # 用 Icarus 跑一組有代表性的（4-state），證明 reset 是完整的
         g = {k: v for k, v in groups(safe=True).items() if k == (4, 10, 32)}
+    elif mode == "ctrl":
+        # 控制路徑：stall / frame_done / 幀中 reset / 背靠背。
+        # 只跑一組即可 —— 它驗的是 ctrl.sv 的狀態機與 stage_en 的 gating，
+        # 那與 (Q,W,D) 無關；C2 已經在 32 組上驗過資料路徑。
+        g = {k: v for k, v in groups(safe=True).items() if k == (4, 10, 32)}
     elif mode == "g6neg":
         g = groups(safe=False)
     else:
@@ -99,7 +106,7 @@ def main():
     # 違規證據，而 c2 信任聚合計數器」才抓到 stale marker 讓 M3 假性通過。
     # 所以修法不是讓 marker 去存證據（那會毀掉這個不對稱），而是**不要快取 g6neg**：
     # 它只有 4 組、實測重跑 1.6 秒，用 1.6 秒換一道 gate 的全部證據，是划算的。
-    use_marks = mode != "g6neg"
+    use_marks = mode not in ("g6neg", "ctrl")
 
     total_frames = total_stages = 0
     n_done = 0
@@ -138,6 +145,15 @@ def main():
             why = (f"G6 觸發（{ev}）+ C2 零 mismatch" if ok else
                    f"G6={'觸發' if fired else '**沒觸發**'}, "
                    f"C2={'通過' if passed else '失敗'}")
+        elif mode == "ctrl":
+            passed, out2 = run_one(sim, Q, W, D, names, wd, assertions=True,
+                                   module="test_ctrl")
+            m = re.search(r"CTRL_STATS \d+ \d+ \d+ (\d+) (\d+)", out2)
+            fr = int(m.group(1)) if m else 0     # 通過的控制路徑條數
+            st = int(m.group(2)) if m else 0     # 插入的 stall 空拍數
+            ok = passed and fr == 4
+            why = (f"控制路徑 {fr}/4 條通過（{st} 個 stall 空拍）" if ok else
+                   f"控制路徑失敗（passed={passed}, 條數={fr}）")
         else:
             passed, out = run_one(sim, Q, W, D, names, wd, assertions=True)
             fired = "G6 violated" in out

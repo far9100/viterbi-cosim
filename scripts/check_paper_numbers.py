@@ -167,9 +167,9 @@ def a(sec, desc, truth, cited, nd=2, doc="report"):
 
 
 # ---- §1 驗證鏈路 ----
-# 36 筆記錄 = 30 個有判準的 gate + 6 筆觀測（M0 3 + M1 6 + M2 3 + M3 5 + M4 3 + M5 8 + M9 8）。
+# 37 筆記錄 = 31 個有判準的 gate + 6 筆觀測（M0 3 + M1 6 + M2 3 + M3 6 + M4 3 + M5 8 + M9 8）。
 # gate 改名留下孤兒的破口已在 scripts/gates.py 修根因（整批取代 milestone），不再靠人發現。
-a("1", "gate 總數", len(GATES), 36, 0)
+a("1", "gate 總數", len(GATES), 37, 0)
 
 # ---- §1.1 通訊層（真值從 gates.csv 的 measured 欄抽出，不是硬寫的常數）----
 a("1.1", "未編碼 @1e-5", gate_num("G1 "), 9.571, 3)
@@ -346,7 +346,7 @@ for _m, _e in (("A", "free_space"), ("A", "indoor"),
 # 這條檢查讓分類不能悄悄漂移：新增觀測卻沒更新文件、或把觀測寫成 gate，都會紅燈。
 _OBS = [g for g in GATES if "觀測" in g["expected"] or "觀測" in g["tolerance"]]
 _REAL = [g for g in GATES if g not in _OBS]
-a("1", "有判準的 gate 數", len(_REAL), 30, 0)
+a("1", "有判準的 gate 數", len(_REAL), 31, 0)
 a("1", "觀測筆數", len(_OBS), 6, 0)
 if len(_REAL) + len(_OBS) != len(GATES):
     fails.append("[gates] gate / 觀測的分類沒有覆蓋 gates.csv 的每一列")
@@ -553,7 +553,7 @@ a("rm", "pm R²", trend("pm")[1], 0.913, 3, doc="readme")
 a("rm", "反事實 對稱 bit1", mech("fixed_hi_sym", "tog_r_b1"), 0.5042, 4, doc="readme")
 a("rm", "反事實 DC偏移 bit1", mech("fixed_hi_asym", "tog_r_b1"), 0.0000, 4,
   doc="readme")
-a("rm", "gate 總數", len(GATES), 36, 0, doc="readme")
+a("rm", "gate 總數", len(GATES), 37, 0, doc="readme")
 
 # 功耗佔比（README §M5 引用了「43.0–54.2% 的功耗」與「10.3–13.5% 的功耗」）
 for (_q, _d), _lab in (((3, 32), "Q3"), ((6, 32), "Q6")):
@@ -956,7 +956,7 @@ _thesis_checks = []
 if os.path.exists(_THESIS_PATH):
     _TT = open(_THESIS_PATH, encoding="utf-8").read().replace(",", "").replace("−", "-")
     _thesis_checks = [
-        ("gate 總數", len(GATES), 36, 0),
+        ("gate 總數", len(GATES), 37, 0),
         ("未編碼 @1e-5", gate_num("G1 "), 9.571, 3),
         ("編碼增益", gate_num("G2b"), 5.434, 3),
         ("3-bit 損失", gate_num("G3 "), 0.225, 3),

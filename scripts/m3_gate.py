@@ -68,6 +68,34 @@ def main():
                      "先驗不安全的格點。而且這些格點上 **C2 仍然零 mismatch**："
                      "RTL 與 golden 錯得一模一樣，這本身就是 C2 有效性的強力佐證。")
 
+    # ---------- M3-1 控制路徑 ----------
+    #
+    # C2 把資料路徑驗到 2.47 億個 stage 零 mismatch，但**所有**的 testbench 都用
+    # 同一種方式驅動 DUT：in_valid 連續拉高、只在 frame 開頭 reset、frame 之間必 reset。
+    # 於是 stall、frame_done、幀中 reset、背靠背 frame 四件事從來沒有被激勵過。
+    # 其中 frame_done 更是 grep 全 repo 沒有任何測試讀過 —— 它可以恆為 0，
+    # 而先前所有 gate 都還是綠的。
+    rcc, outc = sh("MODE=ctrl bash scripts/tier_a.sh")
+    # CTRL_STATS 是印在 cocotb 子行程的 stdout 裡的，run_tier_a 不會轉印；
+    # 但它已經被聚合進 run_tier_a 自己印的 C2_TOTAL 那一行（frames 欄 = 通過的條數、
+    # stages 欄 = stall 空拍數）。抓聚合行，不抓子行程的行。
+    mc = re.search(r"C2_TOTAL ctrl \w+ \d+ (\d+) (\d+)", outc)
+    n_ctrl = int(mc.group(1)) if mc else 0
+    n_stall = int(mc.group(2)) if mc else 0
+    run.check("M3-1 控制路徑（stall / frame_done / 幀中 reset / 背靠背）",
+              rcc == 0 and n_ctrl == 4,
+              measured=f"{n_ctrl}/4 條通過（{n_stall} 個 stall 空拍）",
+              expected="4/4 通過", tolerance="零容忍",
+              detail="四條：(a) frame 中途拉低 in_valid，解碼位元必須與無 stall 時"
+                     "**逐位元相同**——stage_en 同時 gate 住三個模組的四組暫存器"
+                     "（pm / surv_r / re / bm_r），任何一組錯拍都會在這裡出現；"
+                     "(b) frame_done 必須恰好拉高一次（先前沒有任何測試讀過它）；"
+                     "(c) frame 中途 reset 後重灌一整幀，結果必須與基準相同"
+                     "——這正是 rtl_lowpower/ 的 reset-in-enable 改寫要保護的東西；"
+                     "(d) 不 reset 的背靠背 frame 必須無輸出，"
+                     "這是 ctrl.sv 停在 S_DONE 的**設計限制**，把它釘住以免"
+                     "行為改變而沒有人更新 report §5 的限制清單。")
+
     # ---------- G7 ----------
     rc7, out7 = sh("bash scripts/g7_icarus.sh")
     passes = re.findall(r"TB_RESULT PASS (\d+) (\d+)", out7)
