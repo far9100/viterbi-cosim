@@ -183,8 +183,18 @@ def parse_stat(path, tag, Q, W, D):
             return int(m2.group(1)) if m2 else 0
 
         def _dff(b):
+            # `e?df` —— **有 enable 的 FF 也是 FF**。
+            #
+            # 第一版寫 `__df\w+`，比不到 `sky130_fd_sc_hd__edfxtp_1`。
+            # 在 B0（`rtl/`）上看不出來：Yosys 把它全部映成 dfxtp、edfxtp 是 0 個，
+            # 所以 M5 已發表的 flop 數（2429）本來就是對的，改這條不會動到它。
+            # 但 `rtl_lowpower/` 的 `if (rst || en)` 改寫讓 Yosys 推導出 enable-FF，
+            # 於是 B0′ 的 2429 個 flop 只有 59 個被算到 —— **少算 97.6%**。
+            # 而「clock gating 省下的是每個 flop 的回授 mux」這個結論，正是靠
+            # edfxtp → dfxtp + ICG 的消長看出來的：漏掉 edfxtp 等於把唯一能佐證
+            # 那個機制的統計量歸零，而且不會有任何錯誤訊息。
             return sum(int(x) for x in re.findall(
-                r"^\s*(\d+)\s+[\d.E+]+\s+sky130_fd_sc_hd__df\w+", b, re.M))
+                r"^\s*(\d+)\s+[\d.E+]+\s+sky130_fd_sc_hd__e?df\w+", b, re.M))
 
         def _seq_area(b):
             m2 = re.search(r"sequential elements:\s*([\d.]+)", b)
