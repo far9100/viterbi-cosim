@@ -241,15 +241,15 @@ def main():
     print(f"    扇出 **{r0.get('worst_gate_fanout_before')}**、負載 "
           f"**{r0.get('worst_gate_cap_before_pf'):.1f} pF** "
           f"-> 延遲 **{r0.get('worst_gate_delay_before_ns'):.1f} ns**。")
-    print(f"    這是 u_ctrl 的 enable 直接扇出到 register exchange 的 "
-          f"64 states × D 個 flop（外加每個 flop 的 enable mux）。")
-    print(f"    下一顆閘又吃了 62 ns —— 那不是負載，是**轉態時間（slew）**："
-          f"上一級的邊緣爛到讓它自己也變慢。")
+    print("    這是 u_ctrl 的 enable 直接扇出到 register exchange 的 "
+          "64 states × D 個 flop（外加每個 flop 的 enable mux）。")
+    print("    下一顆閘又吃了 62 ns —— 那不是負載，是**轉態時間（slew）**："
+          "上一級的邊緣爛到讓它自己也變慢。")
     print(f"  插了 buffer tree 之後，關鍵路徑降到 {r0['path_after_ns']:.3f} ns"
           f"（最大扇出 {r0.get('max_fanout_after')}），面積只多 "
           f"{100.0*(r0['area_after_um2']/r0['area_before_um2']-1):.1f}%。")
-    print(f"  **這是流程的缺口（Yosys 的 abc 不做負載感知的 buffer 插入），"
-          f"不是架構的極限。**")
+    print("  **這是流程的缺口（Yosys 的 abc 不做負載感知的 buffer 插入），"
+          "不是架構的極限。**")
     fmin = min(r["fmax_after_mhz"] for r in rows)
     print(f"\n  4 個組態的 Fmax 都 >= {fmin:.0f} MHz > 100 MHz "
           f"-> **能量模型假設的 f_clk = 100 MHz 是站得住的。**")

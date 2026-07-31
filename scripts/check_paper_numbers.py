@@ -162,6 +162,16 @@ def gate_num(name):
 A = []
 
 
+# **fails 必須在第一次 append 之前就存在。**
+#
+# 它原本定義在檔案下方的「執行」段，而 §3.2.1 的區間檢查（本檔上半部）就已經
+# 在失敗分支裡 append 了 —— 全綠時走不到那些分支，所以這個 bug 一直沒現形。
+# 但只要其中任何一條真的失敗，checker 就會拋 NameError 而不是印出那條
+# 精心寫好的錯誤訊息，而且它後面的檢查全部不會跑：一次只能修一個問題，還看不到原因。
+# **一個在失敗時才會壞掉的錯誤處理路徑，等於沒有錯誤處理。**（ruff 的 F821 抓到的。）
+fails = []
+
+
 def a(sec, desc, truth, cited, nd=2, doc="report"):
     A.append((doc, sec, desc, truth, cited, nd))
 
@@ -589,7 +599,6 @@ a("rm", "D 減半的代價 (dB)",
   doc="readme")
 
 # ================================================================ 執行
-fails = []
 asserted = {d: set() for d in DOCS}
 
 

@@ -118,9 +118,9 @@ def main():
     fig.savefig(os.path.join(FIG, "fig_pareto.png"), dpi=150)
 
     print(f"圖已寫入 {FIG}/fig_pareto.png")
-    print(f"  代理前緣（64 點）：" +
+    print("  代理前緣（64 點）：" +
           "  ".join(f"Q{Q}/D{D}@{x:.3f}dB" for x, _, Q, D in front))
-    print(f"  量測前緣（4 點）： " +
+    print("  量測前緣（4 點）： " +
           "  ".join(f"Q{Q}/D{D}@{x:.3f}dB/{y:.0f}pJ" for x, y, Q, D in mf))
     return 0
 

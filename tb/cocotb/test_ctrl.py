@@ -33,7 +33,6 @@ stall 那條的判準是**逐位元相同**：有 stall 與沒有 stall 的解�
 而不只是「stall 之後結果仍正確」。
 """
 
-import json
 import os
 import random
 import sys
@@ -157,9 +156,9 @@ async def test_ctrl_paths(dut):
         f"stall：看到 {st_stage} 個 stage_done，預期 {T}。"
         f"**空拍讓 stage 前進了**——stage_en 沒有正確 gate 住。")
     assert st_dec == base_dec, (
-        f"stall：解碼位元與無 stall 時不同。"
-        f"in_valid 中途拉低會 gate 住三個模組的四組暫存器"
-        f"（pm / surv_r / re / bm_r），其中任何一組錯拍都會在這裡出現。")
+        "stall：解碼位元與無 stall 時不同。"
+        "in_valid 中途拉低會 gate 住三個模組的四組暫存器"
+        "（pm / surv_r / re / bm_r），其中任何一組錯拍都會在這裡出現。")
     assert st_done == 1, f"stall：frame_done 拉高了 {st_done} 次，預期 1 次"
     dut._log.info(f"  [PASS] {len(stalls)} 個 stall 空拍：解碼位元逐位元相同")
 

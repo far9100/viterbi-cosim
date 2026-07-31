@@ -25,7 +25,6 @@ bit-accurate 不要求 cycle-accurate）。比對只發生在**架構狀態邊�
 同一份 numpy 程式碼同時驅動 DUT 與參考——不經過檔案匯出（規格書 §4 Tier A）。
 """
 
-import json
 import os
 import sys
 
@@ -152,9 +151,6 @@ async def test_c2_per_stage(dut):
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
 
     t = viterbi_trellis()
-    with open(os.path.join(REPO, "vectors", "MANIFEST.json")) as f:
-        manifest = {v["name"]: v for v in json.load(f)["vectors"]}
-
     n_frames = n_stages = 0
     for name in VECTORS:
         z = np.load(os.path.join(REPO, "vectors", f"{name}.npz"))

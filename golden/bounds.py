@@ -41,7 +41,6 @@ def weight_spectrum(trellis, d_max=24):
 
     做法是對 (state, 輸出重量, 輸入重量) 做動態規劃。輸出重量超過 d_max 的路徑剪掉。
     """
-    S = trellis.n_states
     a = np.zeros(d_max + 1, dtype=np.int64)
     c = np.zeros(d_max + 1, dtype=np.int64)
 

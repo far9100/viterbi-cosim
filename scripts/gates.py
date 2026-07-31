@@ -56,6 +56,42 @@ def _milestone_key(row):
     return (0, int(ms[1:])) if ms[:1] == "M" and ms[1:].isdigit() else (1, 0)
 
 
+
+# 「源碼」的定義：會改變數字的東西。`data/` 不在裡面 —— 它是輸出，
+# 而冷跑會先把它刪光，把它算進 dirty 只會讓旗標恆為 true。
+SRC_PATHS = ["golden", "rtl", "rtl_lowpower", "ppa", "scripts", "sweep",
+             "tb", "tests", "docs", "Makefile", "requirements.txt"]
+
+
+def _eda_versions():
+    """PPA 工具鏈的版本。它們住在 ORFS 容器裡，主機上問不到。
+
+    CLAUDE.md §5.3 明列 PPA run 必須記錄 PDK 與合成工具版本。先前一個都沒記 ——
+    整條面積 / Fmax / 功耗鏈路的可追溯性因此缺一角：`openroad/orfs` 這個 image
+    若換了版本，所有 PPA 數字都會變，而沒有任何一份 metadata 說得出當時用的是哪一版。
+    容器起不來時記 "absent"，不讓 metadata 收集失敗把 gate 拖下水。
+    """
+    out = {}
+    try:
+        p = subprocess.run(
+            ["bash", os.path.join(REPO, "ppa", "orfs.sh"),
+             "yosys -V; openroad -version; sta -version"],
+            capture_output=True, text=True, timeout=120)
+        txt = (p.stdout + p.stderr).strip().splitlines()
+        out["eda_versions"] = [ln.strip() for ln in txt if ln.strip()][:6]
+    except Exception:
+        out["eda_versions"] = "absent"
+    # image 的 digest：`:latest` 會浮動，digest 才是真正釘得住的東西
+    try:
+        p = subprocess.run(
+            ["docker", "image", "inspect", "--format", "{{index .RepoDigests 0}}",
+             "openroad/orfs:latest"], capture_output=True, text=True, timeout=60)
+        out["orfs_image"] = p.stdout.strip() or "absent"
+    except Exception:
+        out["orfs_image"] = "absent"
+    return out
+
+
 def collect_metadata(extra=None):
     """收集重現這次 run 所需的全部資訊（CLAUDE.md §5.3）。
 
@@ -66,20 +102,43 @@ def collect_metadata(extra=None):
         "start_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "argv": sys.argv,
         "git_commit": _git("rev-parse", "HEAD"),
-        "git_dirty": bool(_git("status", "--porcelain")),
+        # **只看源碼路徑。**
+        #
+        # 原本是 `git status --porcelain`（整個工作區），於是七份 meta 全部記
+        # `git_dirty: true` —— 而根因是 `repro.sh` 第 2 步 `rm -rf data` 刪掉了
+        # git 追蹤中的 `data/`。那不是源碼髒，卻讓「這個 commit 描述了產生這些
+        # 數字的程式碼」這句話在每一份 metadata 上都掛著一個假的警示。
+        # 警示要嘛精確，要嘛就沒有用；恆為 true 的旗標等於沒有旗標。
+        "git_dirty_src": bool(_git("status", "--porcelain", "--",
+                                   *SRC_PATHS)),
+        # 各子系統各自的 commit（CLAUDE.md §5.3）。C2 的意義建立在
+        # 「golden 與 rtl 是兩份獨立實作」，所以要分別可追溯到自己的版本。
+        "git_commit_golden": _git("log", "-1", "--format=%H", "--", "golden"),
+        "git_commit_rtl": _git("log", "-1", "--format=%H", "--", "rtl"),
+        "git_commit_rtl_lowpower": _git("log", "-1", "--format=%H", "--",
+                                        "rtl_lowpower"),
         "python": sys.version.split()[0],
     }
+    for mod in ("numpy", "cocotb", "matplotlib", "torch"):
+        try:
+            md[mod] = __import__(mod).__version__
+        except Exception:
+            md[mod] = "absent"
+    # CUDA 只有在 torch 帶得動的時候才有意義
     try:
-        import numpy
-        md["numpy"] = numpy.__version__
-    except ImportError:
-        pass
+        import torch
+        md["cuda"] = torch.version.cuda or "cpu-only"
+        md["gpu"] = (torch.cuda.get_device_name(0)
+                     if torch.cuda.is_available() else "absent")
+    except Exception:
+        md["cuda"] = md["gpu"] = "absent"
     for tool, args in (("verilator", ["--version"]), ("iverilog", ["-V"])):
         try:
             out = subprocess.check_output([tool, *args], stderr=subprocess.STDOUT)
             md[tool] = out.decode().splitlines()[0].strip()
         except Exception:
             md[tool] = "absent"
+    md.update(_eda_versions())
     if extra:
         md.update(extra)
     return md

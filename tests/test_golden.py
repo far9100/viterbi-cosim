@@ -29,11 +29,26 @@ from golden.ref_float import decode_float  # noqa: E402
 from golden.trellis import oracle_trellis, viterbi_trellis  # noqa: E402
 from golden.viterbi_fx import decode_fx  # noqa: E402
 
-COMMSIM = os.environ.get(
-    "COMMSIM_PATH",
-    "/mnt/c/Users/fartw/OneDrive/Desktop/github/communications relay simulator",
-)
-sys.path.insert(0, COMMSIM)
+# 路徑不再寫死在這裡。scripts/check_commsim.py 是唯一的定位器，
+# 它同時用 third_party/commsim.lock 驗被用到的模組內容。
+from scripts.check_commsim import locate as _locate_commsim  # noqa: E402
+
+COMMSIM = _locate_commsim() or ""
+if COMMSIM:
+    sys.path.insert(0, COMMSIM)
+else:
+    # **整個模組跳過，而且理由要印出來（pytest -rs）。**
+    #
+    # 這裡的 G1 Q 函數 oracle 與 K=3 的編/解碼器交叉驗證，全部靠 commsim 這個
+    # **獨立實作**當第二意見。它不可得時這些測試是**真的少驗了東西**，
+    # 不是可以聳肩帶過的雜訊 —— 所以不用 try/except 靜靜吞掉，而是明白 skip。
+    # commsim 是 private repo，CI 上取不到；本機開發時它應該永遠都在。
+    import pytest as _pytest
+    _pytest.skip(
+        "commsim（既有通訊模擬器）不可得。G1 的 Q 函數 oracle 與 K=3 交叉驗證"
+        "會被跳過 —— 那是真的少驗了東西。設 COMMSIM_PATH 或 clone 到 "
+        "third_party/commsim-src。",
+        allow_module_level=True)
 
 
 # ----------------------------------------------------------------------
@@ -72,7 +87,6 @@ def test_encoder_matches_commsim_k3():
 
 def _brute_force_ml(trellis, rx, L):
     """枚舉所有 2^L 條終止碼字，回傳歐氏距離最小的那條的資訊位元。"""
-    m = trellis.m
     best_d = None
     best_u = None
     for bits in itertools.product((0, 1), repeat=L):

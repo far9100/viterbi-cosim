@@ -10,7 +10,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from golden.trellis import Trellis, oracle_trellis, viterbi_trellis  # noqa: E402
+from golden.trellis import oracle_trellis, viterbi_trellis  # noqa: E402
 
 # 既有通訊模擬器（不可 pip install，路徑含空白字元，只能用 sys.path 注入）
 COMMSIM = "/mnt/c/Users/fartw/OneDrive/Desktop/github/communications relay simulator"

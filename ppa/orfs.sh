@@ -12,7 +12,16 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-IMAGE="openroad/orfs:latest"
+# **釘 digest，不用 :latest。**
+#
+# 整條 PPA 鏈路（面積、Fmax、SAIF 功耗、d*）都由這個 image 裡的
+# Yosys / OpenROAD / OpenSTA / sky130hd PDK 產生。`:latest` 一旦被上游推新版，
+# 所有已發表的 PPA 數字都會變，而 repo 裡沒有任何東西說得出當時用的是哪一版
+# —— 那等於整個 M5 與 M9 的可重現性掛在一個會浮動的標籤上。
+# 版本現在也會進每一次 run 的 metadata（scripts/gates.py 的 _eda_versions）。
+#
+# 要升級：改這一行，並在 CHANGELOG 記錄，然後重跑 M5 + M9 並比對數字變化。
+IMAGE="${FEC_ORFS_IMAGE:-openroad/orfs@sha256:a3e793752297cfea1e26e6013b4f43b629a9f074d0341df03d8521b72bc8ace7}"
 
 # source env.sh 是必要的：image 內 yosys 在 /usr/local/bin（PATH 上找得到），
 # 但 openroad 與 sta 在 /OpenROAD-flow-scripts/tools/install/ 底下，

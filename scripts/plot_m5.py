@@ -18,7 +18,7 @@ import numpy as np  # noqa: E402
 from matplotlib import font_manager  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from scripts.energy_model import (EBN0_UNCODED_DB, ETA_PA, F_CLK,  # noqa: E402
+from scripts.energy_model import (EBN0_UNCODED_DB, F_CLK,  # noqa: E402
                                   L1, N0, N_PATHLOSS, P_CIRCUIT, R_SYM)
 from scripts.gates import DATA, REPO  # noqa: E402
 

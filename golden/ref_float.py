@@ -36,16 +36,32 @@ from .traceback import traceback
 
 # 既有通訊模擬器：不是可安裝的套件（pyproject.toml 只有 [tool.mutmut]，沒有 [project]），
 # 且路徑含空白字元。只能用 sys.path 注入。
-_COMMSIM = os.environ.get(
-    "COMMSIM_PATH",
-    "/mnt/c/Users/fartw/OneDrive/Desktop/github/communications relay simulator",
-)
-if _COMMSIM not in sys.path:
+# 路徑不再寫死在這裡。scripts/check_commsim.py 是唯一的定位器，
+# 它同時負責用 third_party/commsim.lock 驗內容 —— M1/M2 的每個 BER 點都由
+# commsim 產生雜訊，內容變了已發表的數字就不再可重現。
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from scripts.check_commsim import locate as _locate_commsim  # noqa: E402
+
+_COMMSIM = _locate_commsim()
+if _COMMSIM and _COMMSIM not in sys.path:
     sys.path.insert(0, _COMMSIM)
 
 
 def commsim():
-    """延遲載入既有模擬器（讓 golden/ 在沒有它時仍可 import）。"""
+    """延遲載入既有模擬器（讓 golden/ 在沒有它時仍可 import）。
+
+    **找不到時在這裡失敗，不是在 import 時失敗。** 本模組的 `decode_float`
+    根本不需要 commsim，而 `golden/ber.py` 又 import 本模組 —— 在 import 時就 raise
+    會讓所有相依 `golden.ber` 的東西（含 C2′ 的 47 條與 union bound 的 9 條測試）
+    整個無法收集，而它們一行都用不到 commsim。錯誤訊息留在真正需要它的地方。
+    """
+    if _COMMSIM is None:
+        raise ImportError(
+            "找不到 commsim（既有通訊模擬器）。M1/M2 的 BER 全部由它產生雜訊，"
+            "沒有它一個數字都重生不出來。\n"
+            "  設 COMMSIM_PATH，或 clone 到 third_party/commsim-src：\n"
+            "    git clone git@github.com:far9100/communications-relay-simulator.git "
+            "third_party/commsim-src")
     from commsim import channel, metrics, modulation, theory
     return channel, modulation, theory, metrics
 

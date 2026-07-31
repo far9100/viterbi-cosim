@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from scripts.energy_model import (ADC_FOM_J, ETA_PA, F_CLK,  # noqa: E402
                                   NF_SWEEP_DB, N_PATHLOSS, P_CIRCUIT_SWEEP,
                                   d_star, d_star_ci, delta_dstar_ci, e_adc,
-                                  e_dec_of, n0_of, uncoded_ebn0_ci)
+                                  e_dec_of, n0_of)
 from scripts.gates import DATA, Run  # noqa: E402
 
 BLOCKS = ["u_acs", "u_tb", "u_minpm", "u_bmu", "u_ctrl"]

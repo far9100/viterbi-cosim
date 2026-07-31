@@ -44,7 +44,7 @@ for depth in (2, 3, 4):
           f"{dt:>6.0f}s {ann:>7.2f}%  PASS")
     if ann >= 99.0:
         print(f"\n  -> depth={depth} 已達 >= 99% 覆蓋率。")
-        print(f"     功耗（2 frames，只是煙霧測試，數字之後會重跑）：")
+        print("     功耗（2 frames，只是煙霧測試，數字之後會重跑）：")
         for k in ["total"] + P.BLOCKS:
             v = pr.get(k)
             if v:

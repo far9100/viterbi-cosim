@@ -83,10 +83,10 @@ def main():
 
     run.csv("results_m4.csv", FIELDS, [{k: r[k] for k in FIELDS} for r in rows])
 
-    print(f"\n=== Tier B 的對外宣稱")
+    print("\n=== Tier B 的對外宣稱")
     print(f"    {n_pts} 個 (winner 組態 × SNR) 點")
     print(f"    {tot_bits:,} 個資訊位元 / {tot_stages:,} 個 trellis stage")
-    print(f"    解碼位元逐位元 XOR：**0 mismatch**")
+    print("    解碼位元逐位元 XOR：**0 mismatch**")
     print(f"\n    相對 Tier A（22,532 個 stage）擴大了 "
           f"{tot_stages/22532:.0f} 倍")
 

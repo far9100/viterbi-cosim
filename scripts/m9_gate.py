@@ -328,8 +328,8 @@ def main():
 
     print("\n=== 事前預測的裁決")
     print(f"  P1 降幅 < 10%     -> **推翻**（實測 {d_tot:+.1f}%）")
-    print(f"  P2 null 存活      -> **未解析**（凍結判準第三列）")
-    print(f"  P3 面積上升        -> **推翻**（實測 -9.35% 到 -12.10%）")
+    print("  P2 null 存活      -> **未解析**（凍結判準第三列）")
+    print("  P3 面積上升        -> **推翻**（實測 -9.35% 到 -12.10%）")
     print("  P4/P5（memory traceback）-> 尚未執行")
 
     return run.finalize()

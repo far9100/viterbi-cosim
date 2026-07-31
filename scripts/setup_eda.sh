@@ -21,12 +21,22 @@ CACHE="$HOME/.cache/oss-cad.tgz"
 if [ -x "$DEST/bin/verilator" ] && [ -x "$DEST/bin/iverilog" ]; then
   echo "已安裝，略過下載。"
 else
-  echo "=== 查詢最新 release"
-  URL=$(curl -fsSL https://api.github.com/repos/YosysHQ/oss-cad-suite-build/releases/latest \
-        | grep -oE '"browser_download_url": "[^"]*linux-x64[^"]*\.tgz"' \
-        | head -1 | cut -d'"' -f4)
-  if [ -z "$URL" ]; then
-    echo "FAIL: 找不到 linux-x64 的 tarball"
+  # **釘住 release tag，不抓 latest。**
+  #
+  # 原本是查 GitHub 的 `releases/latest` —— 意思是**在不同的日子跑這支腳本會裝到
+  # 不同版本的 Verilator 與 Icarus**。而 M3 的 C2、M4 的 2.47 億 stage 浸泡、
+  # M5 與 M9 的閘級模擬全都由它們產生；模擬器換版本，那些結果就不再是同一件事，
+  # 而 repo 裡沒有任何東西說得出當時裝的是哪一版。
+  #
+  # 現行環境實測是 Verilator 5.051 devel / Icarus 14.0 devel（見 data/meta_*.json），
+  # 對應下面這個 tag。要升級：改 OSS_CAD_TAG，重跑 make gates 比對數字，並記進 CHANGELOG。
+  OSS_CAD_TAG="${OSS_CAD_TAG:-2026-07-01}"
+  echo "=== 取 oss-cad-suite $OSS_CAD_TAG（釘住的版本，非 latest）"
+  BASE="https://github.com/YosysHQ/oss-cad-suite-build/releases/download"
+  URL="$BASE/$OSS_CAD_TAG/oss-cad-suite-linux-x64-${OSS_CAD_TAG//-/}.tgz"
+  if ! curl -fsSLI "$URL" >/dev/null 2>&1; then
+    echo "FAIL: 釘住的 tarball 取不到：$URL"
+    echo "  該 release 可能已被移除。確認要換版本之後，設 OSS_CAD_TAG 並記進 CHANGELOG。"
     exit 1
   fi
   echo "  $URL"

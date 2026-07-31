@@ -1,0 +1,13 @@
+{
+  "git_commit": "519e886e4f097b8ea110168d92f6f31c608adb47",
+  "git_remote": "git@github.com:far9100/communications-relay-simulator.git",
+  "modules": {
+    "__init__.py": "7feb7cbe63d72ae673d013026949d0b52ef1b698b7a4e55409afe161fc4c3042",
+    "bits.py": "7570aae1476ecf1541fb82e78fa3e6dab818e3e34a7f04ec965ea12c0bacfc0d",
+    "channel.py": "d25e870c20c7fd043cde3d4eed098c5d87b7edb6b58727f0f9ef8b8652196340",
+    "coding.py": "9f116624b9f1f3e28cf56d260684f8cb3aed1869ed0593c75ada5e39ec71d036",
+    "metrics.py": "074ae6c4f47c8d9e0b87847212434aa4734b4eeaa8ae4def72be660b8f22b1b1",
+    "modulation.py": "647c96927ac289ae9f71717624ce035754bb3c57b99cb8b97866062c57f405bd",
+    "theory.py": "4c64794e78723d5f8bf41064082a56251064c9b2f12d792ef03a83a49e3b1881"
+  }
+}

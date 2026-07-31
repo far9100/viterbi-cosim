@@ -350,7 +350,7 @@ def main():
     print(f"      -> 兩個 rail **相同**的位元: bit{same}；**不同**的位元: bit{diff}")
     print(f"  （對照：AGC @ {SNR_HI:.0f} dB 時 A = {CLIP*sigma_from_ebn0(SNR_HI,R):.3f} << 1，"
           f"訊號整個被 clip 掉 -> rail = {{{g0}, {g1}}}。")
-    print(f"    這就是第二輪失敗的原因：clip 強迫兩個 rail 互補，symmetry-breaking 沒發生。）")
+    print("    這就是第二輪失敗的原因：clip 強迫兩個 rail 互補，symmetry-breaking 沒發生。）")
 
     print(f"\n  在 {SNR_HI:.0f} dB（幾乎無雜訊）下的逐位元翻轉率：")
     print(f"{'量化器':>22} {'rails':>6} "
@@ -362,7 +362,7 @@ def main():
         print(f"{lab:>22} {r['n_rails']:>6} "
               + "".join(f"{r[f'tog_r_b{k}']:>9.4f}" for k in range(Q))
               + f" {r['tog_surv']:>9.4f} {r['duty_surv']:>10.4f}")
-    print(f"\n  預測的定律：toggle(k) ≈ 0.5 · 1{{bit k of r0 ≠ bit k of r1}}")
+    print("\n  預測的定律：toggle(k) ≈ 0.5 · 1{bit k of r0 ≠ bit k of r1}")
     print(f"  DC 偏移後的 rail 是 {a0} 與 {a1}，bit{same} 兩邊相同 "
           f"-> 那些位元的翻轉率必須掉到 ~0。")
 

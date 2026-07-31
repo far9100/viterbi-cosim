@@ -23,8 +23,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import ppa.power as P  # noqa: E402
-from ppa.run_power import (DUMP_DEPTH, FRAMES, SNR_SWEEP,  # noqa: E402
+from ppa.run_power import (SNR_SWEEP,  # noqa: E402
                            evidence_only, point)
 from ppa.synth import synth  # noqa: E402
 import scripts.design as DESIGN  # noqa: E402

@@ -1,0 +1,37 @@
+# pyproject.toml —— 只放工具設定，**不**把本專案宣告成可安裝的套件。
+#
+# 理由：這個 repo 是一條量測鏈路，不是函式庫。它的入口是 `make`，
+# 每個 script 都靠 `sys.path.insert` 從 repo 根目錄跑。宣告成套件會多出一層
+# 「安裝過的版本 vs 工作目錄的版本」的歧義，而本專案最在意的正是
+# 「這些數字由哪一份程式碼產生」——多一個歧義就多一個說不清楚的地方。
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".venv", "ppa/models", "ppa/out", "data", "figures", "third_party"]
+
+[tool.ruff.lint]
+# **明確宣告規則集，而不是繼承預設。**
+#
+# 打開全部規則會得到 309 條，其中 140 條是「多餘的 noqa」、24 條是「沒有插值的
+# f-string」這類風格噪音。在一個以量測正確性為目的的 repo 裡，把那些變成 CI 的
+# 紅燈，只會訓練人去忽略紅燈 —— 而這個專案剩下的每一道紅燈都是要人停下來看的。
+#
+# 所以只選會抓到**真正錯誤**的那幾類：
+#   F   pyflakes —— 未定義的名字、未使用的 import、重複定義的函式
+#   E4  import 的結構問題
+#   E7  語句層級的錯誤（例如 `l = 1` 之外的真問題）
+#   E9  語法錯誤與 IO 錯誤
+#
+# E402（import 不在檔首）留在 F/E4 之外：每支 script 都必須先 sys.path.insert
+# 才 import 得到 golden/ 與 scripts/，那是 repo 結構決定的，不是疏忽。
+select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "sweep"]
+# -rs：把 skip 的原因印出來。commsim 在 CI 上不可得，相依它的測試會 skip，
+# 而「skip 了幾條、為什麼」必須看得見 —— 不能讓 oracle 測試被靜音掉還顯示綠燈。
+# **不要放 -q。** scripts/m2_gate.py 自己會加 -q，兩個疊起來就是 -qq（雙重安靜），
+# pytest 會連 "N passed" 那行摘要都不印 —— 而 C2′ 這道 gate 正是靠解析那行裁決的。
+# 實測後果：n_pass 解析成 0，gate 判失敗（幸好是 fail-closed，不是靜默通過）。
+addopts = "-rs"

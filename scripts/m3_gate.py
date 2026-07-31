@@ -58,8 +58,6 @@ def main():
     # ---------- G6 負向 ----------
     rc6, out6 = sh("MODE=g6neg bash scripts/tier_a.sh")
     fires = re.findall(r"G6 觸發（stage (\d+), spread (\d+) > 2\^\(W-1\)=(\d+)）", out6)
-    m6 = re.search(r"C2_TOTAL g6neg \w+ (\d+) (\d+) (\d+)", out6)
-    n6 = int(m6.group(1)) if m6 else 0
     ev = "; ".join(f"stage {a}, spread {b}>{c}" for a, b, c in fires)
     run.check("G6 負向：4 個先驗不安全格點必須觸發", rc6 == 0 and len(fires) == 4,
               measured=f"{len(fires)}/4 觸發 —— {ev}",
@@ -139,11 +137,11 @@ def main():
              {"metric": "g7_frames", "value": n_f7},
              {"metric": "g7_bits", "value": n_b7}])
 
-    print(f"\n=== C2 的對外宣稱")
+    print("\n=== C2 的對外宣稱")
     print(f"    {n_grp} 組 (Q,W,D) 組態 × {n_fr} 個 frame × {n_st} 個 stage 比對，"
           f"**0 mismatch**")
-    print(f"    每個 stage 比對：bm[4]、pm[64]、survivor[64]、解碼位元")
-    print(f"\n=== G6 負向的證據")
+    print("    每個 stage 比對：bm[4]、pm[64]、survivor[64]、解碼位元")
+    print("\n=== G6 負向的證據")
     for a, b, c in fires:
         print(f"    stage {a} 觸發，實測 PM spread {b} > 2^(W-1) = {c}")
 

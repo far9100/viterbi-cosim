@@ -22,7 +22,6 @@ C2 就失去意義（RTL 對的是一份錯的參考）。所以必須有 C2′�
 而 wrap 之後的 modulo 比較正是最容易在 CPU/GPU 之間走鐘的地方。
 """
 
-import itertools
 import os
 import sys
 

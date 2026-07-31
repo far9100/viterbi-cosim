@@ -135,7 +135,7 @@ def main():
     rows = []
     for Q, W, D, clip, snr in jobs:
         if time.time() - t0 > 460:
-            print(f"時間預算用盡，乾淨結束。再跑一次即可續做。")
+            print("時間預算用盡，乾淨結束。再跑一次即可續做。")
             return 1
         r = point(Q, W, D, clip, snr)
         rows.append(r)

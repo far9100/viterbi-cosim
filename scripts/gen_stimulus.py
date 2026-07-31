@@ -43,7 +43,6 @@ from golden.ber import code_rate  # noqa: E402
 from golden.quantizer import quantize, sigma_from_ebn0  # noqa: E402
 from golden.trellis import viterbi_trellis  # noqa: E402
 from golden.viterbi_fx import decode_fx  # noqa: E402
-from scripts.gates import collect_metadata  # noqa: E402
 
 CHUNK = 2048         # 一次算幾個 frame（記憶體與速度的折衷）
 

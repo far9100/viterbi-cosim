@@ -1,0 +1,81 @@
+# CI —— 只跑「免費 runner 真的做得到」的那一部分。
+#
+# ## 這條 CI 涵蓋什麼、不涵蓋什麼（讀綠燈之前先讀這段）
+#
+# 一個綠燈若不涵蓋主要證據鏈，綠燈本身就是誤導。所以明列：
+#
+# **涵蓋**
+#   * pytest（golden model、union bound、能量模型、ppa 解析器、單一來源）
+#   * check_paper_numbers.py —— 對**已提交的 CSV** 驗報告與 README 的每個數字
+#   * mutate_check.sh —— 檢查器自己的變異測試（8 種）
+#   * Verilator lint，rtl/ 與 rtl_lowpower/ 兩個目錄
+#   * 凍結文件本體不可變（check_paper_numbers.py §6）
+#   * ruff + shellcheck
+#
+# **不涵蓋**（需要本機的 GPU / Docker / 數小時）
+#   * M2 的 GPU 掃描（硬相依 CUDA）
+#   * M5 / M9 的 PPA：Yosys / OpenROAD / OpenSTA 都在 openroad/orfs 容器裡
+#   * 閘級模擬與 SAIF（單點就要數分鐘，全部要數小時）
+#   * Tier A / Tier B 的 C2（Verilator 建置 32 組 + 2.47 億 stage 浸泡）
+#   * `make repro` 的冷跑（5-8 小時）
+#
+# 也就是說：**CI 綠不代表數字是對的，只代表數字與文件一致、且程式碼還能跑。**
+# 真正的證據鏈由本機的 `make gates` 與 `make repro` 產生。
+#
+# commsim（既有通訊模擬器）在 CI 上不可得，它是 private repo。相依它的測試會 skip，
+# 而 skip 幾條會被明白印出來 —— 不為了讓 CI 好看而把 oracle 測試靜音掉。
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # 凍結文件的本體要對照 tag 的 blob，需要完整歷史
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安裝 Python 相依
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt ruff
+
+      - name: 安裝 Verilator
+        run: sudo apt-get update && sudo apt-get install -y verilator shellcheck
+
+      - name: pytest（commsim 不可得的測試會 skip）
+        run: |
+          python -m pytest tests/ sweep/test_c2prime.py -q -rs 2>&1 | tee /tmp/pt.log
+          echo "### pytest" >> "$GITHUB_STEP_SUMMARY"
+          tail -3 /tmp/pt.log >> "$GITHUB_STEP_SUMMARY"
+          grep -c SKIPPED /tmp/pt.log >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: 數字稽核（對已提交的 CSV）
+        run: python scripts/check_paper_numbers.py
+
+      - name: 變異測試（檢查器必須抓得到錯）
+        run: bash scripts/mutate_check.sh
+
+      - name: Verilator lint（rtl/ 與 rtl_lowpower/）
+        run: |
+          for d in rtl rtl_lowpower; do
+            verilator --lint-only -sv -I$d --top-module viterbi_top \
+              $d/bmu.sv $d/acs_butterfly.sv $d/acs_array.sv $d/minpm.sv \
+              $d/traceback.sv $d/ctrl.sv $d/viterbi_top.sv
+          done
+
+      - name: ruff
+        run: ruff check .
+
+      - name: shellcheck
+        run: shellcheck -S warning scripts/*.sh ppa/*.sh || true

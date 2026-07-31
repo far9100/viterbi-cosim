@@ -78,7 +78,6 @@ def decode_gpu(rq, trellis, Q, W, D, n_info, device="cuda",
     m_bit = trellis.m - 1                # 5
 
     X = torch.as_tensor(trellis.bfly_out, device=dev, dtype=torch.long)   # (32,)
-    Xc = X ^ ((1 << n_out) - 1)
 
     lam = 2 * ((1 << Q) - 1)
     maxr = (1 << Q) - 1

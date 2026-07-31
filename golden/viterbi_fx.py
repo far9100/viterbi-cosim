@@ -81,8 +81,6 @@ def decode_fx(rq, trellis, Q, W, D, n_info, mode="window",
     H = trellis.half
     j = np.arange(trellis.n_bfly)
     X = trellis.bfly_out[j]
-    full = (1 << n_out) - 1
-    Xc = X ^ full
 
     lam = lambda_max(Q)
     maxr = (1 << Q) - 1

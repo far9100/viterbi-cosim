@@ -25,10 +25,8 @@ gate-level VCD 是 30–180 KB/cycle（34k 個 cell，每條 ABC-mapped net 都�
 SAIF 是 O(#nets) 而非 O(#nets × cycles)，每點幾 MB，可入庫當證據。
 """
 
-import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
