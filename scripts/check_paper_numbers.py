@@ -702,7 +702,23 @@ PREREG_PAIRS = [
 ]
 _PREREG = [p for pre, _ in PREREG_PAIRS for p in pre]
 
+# **只驗「先後」是不夠的。**
+#
+# 配對重構讓 M9 第一次進到這個檢查，然後就看到：`docs/lowpower_baseline.md` 與
+# `data/power_m9.json` 的 commit 只差 **60 秒**（M5 那一對是 21.2 小時）。
+# 60 秒分不出「先寫登記文件、再跑量測」與「量完之後補寫文件、兩者一起 commit」——
+# 而那正是預先登記唯一要排除的情形。只要求 pre < mea 的話，一次批次 commit
+# 就能讓任何事後補寫的文件看起來像預先登記。
+#
+# 所以低於門檻的配對**預設紅燈**。但它不能只是紅燈就算了：那幾個 commit 已經
+# 發生在過去，重寫歷史只會讓證據更差，而讓 `make report` 永久紅燈等於廢掉整條流程。
+# 折衷是把「無法補救的事實」變成「強制且可驗證的揭露」——與本專案處理「未做」
+# 項目的做法一致：低於門檻的配對，必須在報告**與** README 逐字寫出實際間隔，
+# 檢查器驗那段揭露存在且數字正確，才放行。弱點因此永久可見，而不是被消音。
+PREREG_MIN_GAP_H = 1.0
+
 PREREG_GAPS = []      # [(登記文件們, 間隔小時)]，供最後列印
+PREREG_WEAK = []      # [(登記文件們, 間隔秒)] 低於門檻、必須被揭露的配對
 for _pre, _mea in PREREG_PAIRS:
     _pre_ts = {p: _added_ts(p) for p in _pre}
     _mea_ts = {p: _added_ts(p) for p in _mea}
@@ -721,7 +737,24 @@ for _pre, _mea in PREREG_PAIRS:
                 f"最晚的登記 {_latest_pre} >= 最早的量測 {_earliest_mea}。"
                 f"報告不得宣稱「事前登記」。")
         else:
-            PREREG_GAPS.append((_pre, (_earliest_mea - _latest_pre) / 3600.0))
+            _gap_s = _earliest_mea - _latest_pre
+            PREREG_GAPS.append((_pre, _gap_s / 3600.0))
+            if _gap_s / 3600.0 < PREREG_MIN_GAP_H:
+                PREREG_WEAK.append((_pre, _gap_s))
+
+# 低於門檻的配對：報告與 README 都必須逐字揭露實際間隔（秒），否則紅燈。
+for _pre, _gap_s in PREREG_WEAK:
+    _names = " / ".join(os.path.basename(p) for p in _pre)
+    for _doc in ("report", "readme"):
+        _txt = DOCSEARCH[_doc]
+        if not all(os.path.basename(p) in _txt for p in _pre) \
+                or f"{_gap_s} 秒" not in _txt:
+            fails.append(
+                f"[prereg:weak] {_names} 與其量測的 commit 只差 **{_gap_s} 秒**"
+                f"（門檻 {PREREG_MIN_GAP_H} 小時），這個間隔分不出"
+                f"「先登記再量測」與「量完再補寫文件一起 commit」。"
+                f"必須在 {DOCS[_doc]} 逐字揭露檔名與「{_gap_s} 秒」，"
+                f"否則不得宣稱它是預先登記。")
 
 # 第一對的間隔是報告與 README 引用的那個數字（21.2 小時），維持原本的變數名。
 PREREG_GAP_H = PREREG_GAPS[0][1] if PREREG_GAPS else None
@@ -820,6 +853,10 @@ for _c in set(_cnts):
 # ---- §5 百分比覆蓋掃描 ----
 # 只掃報告，且只掃「結果」段落（§2 起）。標題/摘要的百分比也算，因為它們就是結果。
 EXPECT_UNCOVERED = {
+    # 21.2 小時是 M5 那一對登記/量測的 commit 間隔，由 git 時間戳現算
+    # （見 §4 的 PREREG_GAPS），不是 CSV 裡的量測值。每次執行都會重算並比對，
+    # 所以它有比 assertion 更強的保證，只是不經過 CSV 這條路。
+    "21.2",
     "50.0",     # 「≈0.5 / 50%」是最大熵的定義，不是量測值
     "1.0",      # 「總功耗只變動 1.0%」—— 來自 gates.csv 的 M5-3 measured 欄（文字）
     "1.8",      # 同上（ACS switching）
@@ -1054,8 +1091,14 @@ if not fails:
     # 先前的全域 max/min 寫法讓它根本加不進來（加了就誤判紅燈）。
     for _pre, _gap in PREREG_GAPS:
         _names = " / ".join(os.path.basename(p) for p in _pre)
-        print(f"\n預先登記檢查：{_names} 的 commit 早於其量測 "
-              f"**{_gap:.1f} 小時**（git 時間戳可驗證）。")
+        if _gap < PREREG_MIN_GAP_H:
+            # 不要把 60 秒印成「0.0 小時（可驗證）」—— 那讀起來像正常證據。
+            print(f"\n預先登記檢查：{_names} 的 commit 只早於其量測 "
+                  f"**{round(_gap * 3600)} 秒**，低於 {PREREG_MIN_GAP_H} 小時門檻 ⇒ "
+                  f"時間戳**不構成**預先登記的證據，已依規定在報告與 README 揭露。")
+        else:
+            print(f"\n預先登記檢查：{_names} 的 commit 早於其量測 "
+                  f"**{_gap:.1f} 小時**（git 時間戳可驗證）。")
     if "DSTAR_RECOMPUTED" in dir():
         print(f"d* 重算檢查：{DSTAR_RECOMPUTED} 個 d* 全部由 data/results.csv + "
               f"docs/energy_model.md 的凍結常數重算驗證（不是讀已算好的值）。")

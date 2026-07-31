@@ -261,3 +261,10 @@ R² = 0.913——因為它是整條路徑上唯一不在最大熵的訊號，它
    memory traceback 對照、SRAM macro 版本**都沒做**，不得默示為已驗證。
 5. **機制那條結論我試錯了四輪**（其中兩輪是**實驗設計**寫壞，不是機制錯），
    全部保留在 `scripts/diag_mechanism.py` 的 docstring。核心主張四輪都沒被打破。
+
+6. **M9 的「預先登記」沒有時間戳證據。** `docs/lowpower_baseline.md` 與
+   `data/power_m9.json` 的 commit 只相隔 **60 秒**（M5 那一對是 21.2 小時），
+   M8/M9 的四個 commit 全部落在 82 秒內、與 CHANGELOG 記載的工作日期不一致。
+   60 秒分不出「先登記再量測」與「量完再補寫文件一起 commit」。M9 的事前預測
+   確實寫在獨立文件裡且被自己推翻（P1 登記 < 10%、實測 −42.7%），但支持它的
+   是文件內容與 CHANGELOG，**不是 commit 時間戳**——不應與 M5 等同視之。
