@@ -167,6 +167,19 @@ def test_c2prime_ties_are_actually_exercised():
         pm_new[:, 1::2] = np.where(sel1, a1, q1)
         pm = pm_new
 
+    # **把這份重寫釘回真正的遞迴。**
+    #
+    # 上面那段是 ACS 前向遞迴的第四份實作（golden / torch / RTL 之外），存在的理由
+    # 只是要數平手次數。但它一旦與真正的遞迴漂移（例如有人改了 tie-break 方向或
+    # modulo 的位寬），它會**繼續回報一個看起來合理的平手數**，而這條測試照樣綠 ——
+    # 於是「平手真的被測到了」這個保證變成假的。
+    # 所以拿 golden 的 pm 歷史來釘住它：兩者的最終 pm 必須逐元素相同。
+    gold = decode_fx(rq, t, Q, W, D, rq.shape[1] - t.m, mode="window",
+                     check_g6=False, keep_history=True)
+    assert np.array_equal(pm, gold["pm"][:, -1, :]), (
+        "平手計數用的重寫遞迴已與 golden 的 ACS 漂移 —— "
+        "它回報的平手數不再描述真正被測到的東西")
+
     assert n_tie > 0, "這組向量完全沒有平手 —— tie-break 語意沒被測到，C2' 的通過不算數"
     print(f"\n  平手次數 {n_tie}（Q={Q}：軟值只有 8 階，平手本來就常見）")
 

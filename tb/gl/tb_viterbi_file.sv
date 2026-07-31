@@ -109,6 +109,13 @@ module tb_viterbi_file;
             code = $fscanf(fd, "%h %h\n", stim_r0[i], stim_r1[i]);
             if (code == 2) i = i + 1;
         end
+        // **不得靜默截斷。** 讀滿 MAXS 還沒到檔尾，代表激勵比陣列大 ——
+        // 先前這裡會安靜地只用前 MAXS 筆，後面的 stage 讀到未初始化的內容，
+        // 症狀是 C2 在某個 frame 之後開始 mismatch，而診斷會指向 RTL 而不是 TB。
+        if (!$feof(fd)) begin
+            $display("FATAL: 激勵超過 MAXS=%0d，被截斷了", MAXS);
+            $fatal(1);
+        end
         $fclose(fd);
 
         // 讀期望的解碼位元
@@ -118,6 +125,10 @@ module tb_viterbi_file;
         while (!$feof(fd) && i < MAXB) begin
             code = $fscanf(fd, "%d\n", exp_dec[i]);
             if (code == 1) i = i + 1;
+        end
+        if (!$feof(fd)) begin
+            $display("FATAL: 期望位元超過 MAXB=%0d，被截斷了", MAXB);
+            $fatal(1);
         end
         $fclose(fd);
 
