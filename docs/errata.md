@@ -28,6 +28,7 @@
 | E-03 | `docs/traceback_convention.md` | §2 | 「D=24（低於 5K=35）會可觀地變差，**D=64 接近最佳**」 | 前半成立，**後半撤回**。windowed(D) − ML 損失為 +0.209 / −0.050 / +0.058 / −0.072 dB，非單調且出現數學上不可能的負損失 ⇒ D=32/48/64 三者全落在 ±0.076 dB 的量測雜訊地板內。只可宣稱「D 低於 5K 會可觀變差」，**不可宣稱 D=64 優於 D=32** | `data/d_sweep.csv` 的 `loss_vs_ml_db` 欄 | `2026-07-29-07` |
 | E-04 | `docs/falsification.md` | §5.4 | d\* 是上界，「Q 之間的**相對**比較不受影響（同一個 D 下 traceback 完全相同）」 | **方向反了。** traceback 能量在 Q3 與 Q6 之間是共模項，縮小它會讓兩者的 E_dec 差**佔比變大**，於是 Δd\* 變大 ⇒ 已報的 Δd\* 是**下界**，不是不受影響 | `data/results_m5_tb_sensitivity.csv` 的 `delta_dstar_pct` 對 `tb_factor` 單調 | `2026-07-29-06` |
 | E-05 | `docs/lowpower_baseline.md` | §3 | 判準表以線性迴歸 **R² < 0.5** 為 null 存活的必要條件 | 判準**原樣保留、原樣套用**（見 gate `M9-4`），本條只揭露它的一個侷限：n=5 時 R² 解析不出趨勢。同一個設計、同一組激勵，B0 的 R² 是 0.478、B0′ 是 0.551 —— 光是改寫 RTL 的 reset 寫法就跨過了 0.5 門檻 | `data/gates.csv` gate `M9-6` | `2026-07-30-03` |
+| E-06 | `docs/memory_traceback_baseline.md` | §1 表格 | B2 的「記憶體」欄寫 **64 × 2D** | **硬體上不夠。** golden 保留完整歷史所以看不出來，但硬體是環狀緩衝，回溯進行中**寫入仍在繼續**：批次在 t_end 觸發、引擎跑 D 個 stage，期間又寫進 D 筆，而它最舊要讀到 `t_end-2D+1` —— 從最舊需求到最新寫入橫跨 **3D**。實測 2D 在 k=2D-1 那一步被覆蓋，**3D 才無衝突**（`scripts/verify_batch_memory.py`）。這也讓 §5 的 P-B3（面積 +60% 以上，前提是 D→2D）的**前提偏低**——但**預測原文不改、原樣裁決** | `scripts/verify_batch_memory.py` | `2026-08-01-14` |
 
 ## 不在本檔範圍內的東西
 

@@ -1012,6 +1012,7 @@ FROZEN_TAGS = {
     "docs/energy_model.md": "m1-golden",
     "docs/falsification.md": "m1-golden",
     "docs/lowpower_baseline.md": "m9-lowpower",
+    "docs/memory_traceback_baseline.md": "m14-freeze",
 }
 BAND_MARK = "▼▼▼"
 
@@ -1022,14 +1023,22 @@ BAND_MARK = "▼▼▼"
 DOCS_ROOT = os.environ.get("FEC_DOCS_ROOT", ROOT)
 
 
+# 帶的起點必須是**以 "# ▼▼▼" 開頭的標題行**，不是文字裡任何一個 ▼▼▼。
+#
+# 第一版用 `text.find(BAND_MARK)`，在 docs/memory_traceback_baseline.md 上就炸了——
+# 那份凍結文件的結尾自己描述了這個機制（「本文件之後的任何修改只能以檔尾追加
+# `▼▼▼` 勘誤帶的方式進行」），於是切點落在**凍結本體自己的散文裡**，
+# 本體被截短 115 個字元，不可變檢查誤判成「本體被改動了」。
+# 一份說明機制的文件，不能因為說明了那個機制就過不了那個機制的檢查。
+_BAND_RE = re.compile(r"^# " + BAND_MARK, re.M)
+
+
 def _split_band(text):
-    """切成 (凍結本體, 勘誤帶)。切點是**帶標記所在那一行的行首**，不是標記字元本身——
-    否則標題的 "# " 會被算進本體，看起來像本體多了內容。"""
-    i = text.find(BAND_MARK)
-    if i < 0:
+    """切成 (凍結本體, 勘誤帶)。切點是帶標題行的行首。"""
+    m = _BAND_RE.search(text)
+    if not m:
         return text, ""
-    j = text.rfind("\n", 0, i) + 1
-    return text[:j], text[j:]
+    return text[:m.start()], text[m.start():]
 
 
 for _path, _tag in FROZEN_TAGS.items():
