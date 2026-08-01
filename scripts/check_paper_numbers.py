@@ -1013,6 +1013,7 @@ FROZEN_TAGS = {
     "docs/falsification.md": "m1-golden",
     "docs/lowpower_baseline.md": "m9-lowpower",
     "docs/memory_traceback_baseline.md": "m14-freeze",
+    "docs/folded_architecture.md": "m15-freeze",
 }
 BAND_MARK = "▼▼▼"
 
