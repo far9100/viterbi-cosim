@@ -618,6 +618,10 @@ fec-cosim/
 | **M8** | 投稿前嚴審（規格書外，2026-07-29） | 六項被靜默放掉的驗收條件補齊（含 §9 M6 的 Pareto 圖與 `data/results.csv`）；文獻檢索推翻兩項定位（見 §0 的修訂框）。tag `m8-audit` |
 | **M9** | 低功耗基準線（規格書外，2026-07-30） | 判準與事前預測凍結於 `docs/lowpower_baseline.md`（量測前 commit）；三態 B0/B0′/B1′ 各先過 gate-level C2 才量功耗；**P1 與 P3 兩條事前預測被推翻**，P2 未解析，**P4/P5 因 B2 未建置而未裁決**。tag `m9-lowpower` |
 | **M10** | 可重生性修復（規格書外，2026-07-31） | 六處腐化修根因；`make gates` 首次涵蓋全部 36 列；冷跑 229 分**同時涵蓋 M0–M5 與 M9**，除 `meta_*.json` 與 `vectors/MANIFEST.json` 的 metadata 外逐位元組相同。tag `m10-repro2` |
+| **M11** | 凍結文件勘誤機制（規格書外，2026-07-31） | `docs/errata.md` + 四份凍結文件的 `▼▼▼` 帶（原文一字不改）；`check_paper_numbers.py` §6 把「凍結本體不得回頭改」變成會紅燈的檢查（逐位元組對照凍結 tag 的 blob）；預先登記檢查改為 (登記文件, 量測產物) 配對並加 1 小時最小間隔門檻——**M9 的預先登記因此第一次被驗，實測時間戳只支持 60 秒**，依規定強制揭露。tag `m11-errata` |
+| **M12** | 驗證缺口補強（規格書外，2026-08-01） | 控制路徑首次驗證（stall / `frame_done` / 幀中 reset / 背靠背，gate `M3-1`）；`rtl_lowpower/` 首次進 lint 與 Tier A（gate `M3-2`）；`ppa/` 的六個 parser 首次有測試，並抓到 `_dff` 漏算 enable-FF；G2a 的 union bound oracle 首次被測試釘住；設計組態與 RTL 清單單一來源化。gate 36 → 38、測試 37 → 128。tag `m12-verify` |
+| **M13** | 環境可攜性與 CI（規格書外，2026-08-01） | commsim 以 `third_party/commsim.lock` 鎖定內容（刻意不 vendor，保留它作為獨立 oracle 的價值）；`openroad/orfs` 與 oss-cad-suite 釘版本；metadata 補完 CLAUDE.md §5.3；CI 上線並在檔頭明列**不涵蓋**的部分。ruff 首次執行即在檢查器自身抓到 `fails` 在定義前被使用。tag `m13-ci` |
+| **M14** | B2 記憶體式回溯（進行中） | 凍結文件 `docs/memory_traceback_baseline.md` 已於量測前提交；`golden` 的 `mode='batch'` 完成，凍結的交叉檢查 C-B1 實測 0.0166%（門檻 1%）。**RTL 未做**——實作前發現 B2 會改動 frame 層輸出時序、不是 drop-in，設計推導見 `docs/m14_implementation_notes.md`。 |
 
 **（M6 之後，選配）** Polar SC stretch goal 才允許開工。
 

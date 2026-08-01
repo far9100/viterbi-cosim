@@ -93,6 +93,10 @@ make repro    # **冷跑**：刪光 data/ 從零重生，逐位元組驗證
 | M8 投稿前嚴審 | **完成**（六項被靜默放掉的驗收條件補齊，文獻檢索推翻兩項定位，tag `m8-audit`） |
 | M9 低功耗基準線 | **完成**（三態 B0/B0′/B1′，clock gating −42.7%，兩條事前預測被推翻，tag `m9-lowpower`） |
 | M10 可重生性修復 | **完成**（六處腐化修根因，冷跑 229 分涵蓋 M0–M5 + M9，tag `m10-repro2`） |
+| M11 凍結文件勘誤機制 | **完成**（`docs/errata.md` + 五條勘誤；凍結本體逐位元組對照凍結 tag 的檢查；預先登記改配對並加最小間隔門檻，tag `m11-errata`） |
+| M12 驗證缺口補強 | **完成**（控制路徑首次驗證、`rtl_lowpower/` 首次驗證、`ppa/` parser 首次有測試；gate 36 → 38，測試 37 → 128，tag `m12-verify`） |
+| M13 環境可攜性與 CI | **完成**（commsim 鎖定、ORFS 釘 digest、metadata 補完 §5.3、CI 上線，tag `m13-ci`） |
+| M14 B2 記憶體式回溯 | **進行中**（凍結文件與 golden 的 `mode='batch'` 完成並通過交叉檢查；RTL 未做，見 `docs/m14_implementation_notes.md`） |
 
 **專案定案（2026-07-17）：規格書 §10 的六項 Definition of Done 全部達成並實測驗證。**
 已揭露的邊界（d\* 為上界、PPA 僅 full-parallel、ADC 敏感度線、折疊/post-route/memory-traceback 未做）
