@@ -50,10 +50,34 @@ SystemVerilog                 pred(s, sv) = {sv[s], s[VM-1:1]}
   把輸出時序**寫死在深度 D 上**，`S_FLUSH` 的長度也是 `D-1`。
 
 ⇒ **B2 需要 `ctrl.sv` 一個可參數化的 `OUT_LAT`（B0/B1 為 `D-1`，B2 為 `3D-1`）
-與更長的 flush（`D+m`）。** 兩份凍結文件都把 B2 寫成模組層的替換，那是低估。
+與更長的 flush。** 兩份凍結文件都把 B2 寫成模組層的替換，那是低估。
 
 工作量因此是「加一個模組 **+ 改狀態機 + 加輸出緩衝 + 重驗控制路徑**」，
 而控制路徑的四條測試（gate `M3-1`）是 M12 才補上的，剛好可以直接複用。
+
+### 3.1 更正：flush 的長度是 `3D-1`，不是 `D+m`（2026-08-08）
+
+本節原本寫「更長的 flush（`D+m`）」。`D+m` 是**尾端要解出的 stage 數**，
+不是 flush 要吐的位元數 —— 兩者差很多：frame 只有 T 個 stage，而 B2 的輸出延遲是
+`3D-1`，所以**最後 `3D-1` 個位元全部落在 flush 期間**，其中還包含在途批次的剩餘輸出
+（D=32 時 `D+m` = 38，實際要吐 95 個）。flush 期間引擎也還沒閒著：它要先跑完
+在途的那一批，才輪得到尾端回溯。
+
+正確的值由 `scripts/verify_b2_schedule.py` 逐拍模擬量出來：
+
+```
+OUT_LAT = FLUSH_LEN = 3D - 1        （B0 / B1 是 D - 1）
+```
+
+**`FLUSH_LEN == OUT_LAT` 在兩種回溯架構上同時成立**，因為它們滿足同一條恆等式：
+S_RUN 期間吐 `T - OUT_LAT` 個位元、flush 期間吐 `OUT_LAT` 個，合計恰好 T 個 ——
+而「整個 frame 恰好 T 個位元」正是 `tb/cocotb/test_viterbi.py:133` 斷言的契約。
+所以 `ctrl.sv` 只需要**一個**參數，不是兩個。
+
+同一支腳本另外釘住三件事：ping-pong 只需要 **2 個**緩衝、
+整個 frame 恰好吐 **T** 個位元、以及 E-06 的 3D 從解碼位元端再驗一次。
+**2D 的失效模式值得記住：不是全壞，是約四分之一的位元錯**（D=32 時 250/1024），
+輸出看起來完全正常 —— 靠肉眼或抽樣是抓不到的。
 
 ## 4. 輸出緩衝必須 ping-pong
 
@@ -77,9 +101,9 @@ SystemVerilog                 pred(s, sv) = {sv[s], s[VM-1:1]}
 
 ## 6. 建議的實作與驗證順序
 
-1. `rtl_lowpower/traceback_mem.sv`（本檔 §1–§5）。
-2. `rtl_lowpower/ctrl.sv` 加 `OUT_LAT` 與 `FLUSH_LEN` 參數；B0/B1 的預設值
-   必須讓合成結果**逐位元組不變**（比照 M12 對 `bm_r` 的同一性 gate）。
+1. `rtl_lowpower/traceback_mem.sv`（本檔 §1–§5，排程依 §3.1）。
+2. `rtl_lowpower/ctrl.sv` 加**一個** `OUT_LAT` 參數（flush 長度等於它，見 §3.1）；
+   B0/B1 的預設值 `D-1` 必須讓合成結果**逐位元組不變**（比照 M12 對 `bm_r` 的同一性 gate）。
 3. `rtl_lowpower/viterbi_top.sv` 加 `TB_MODE`（0 = register exchange，
    預設；1 = memory），用 `generate` 選擇。
 4. `make lint` —— 兩個目錄 × 三個前端。
@@ -93,6 +117,11 @@ SystemVerilog                 pred(s, sv) = {sv[s], s[VM-1:1]}
 
 * 已完成：凍結文件、`golden` 的 `mode='batch'`、10 條交叉檢查測試
   （C-B1 實測最大不一致率 **0.0166%**，門檻 1%）。
+* 已完成（2026-08-08）：**逐拍排程原型 `scripts/verify_b2_schedule.py`**。
+  12 組 (D, NINFO, seed) 的輸出序列與 `golden` 的 `mode='batch'` 逐位元相同，
+  並定出 `OUT_LAT = FLUSH_LEN = 3D-1`（修正本檔 §3 原本寫的 `D+m`，見 §3.1）、
+  ping-pong 只要 2 個緩衝、整幀恰好 T 個位元。
+  **RTL 要照這份排程寫**——它已經是可執行的規格，不是散文。
 * 未完成：上面 §6 的第 1 步起全部。
 * 第一版 RTL 草稿因為 §5 的錯誤與 tail 未處理而**未提交**——
   未經驗證的 RTL 不進樹，那正是本專案的紀律。
