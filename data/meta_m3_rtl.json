@@ -1,14 +1,28 @@
 {
-  "start_timestamp": "2026-08-01T00:37:25+0800",
+  "start_timestamp": "2026-08-08T10:42:05+0800",
   "argv": [
     "scripts/m3_gate.py"
   ],
-  "git_commit": "e97049e55d8b0f231d8f53fecf2d51b01528fb15",
-  "git_dirty": true,
+  "git_commit": "c908d08c8847f7848875c2909a891503396baf40",
+  "git_dirty_src": false,
+  "git_commit_golden": "e3d9a2f5dfb4a3263bd6177c6fb14b0a676d0be0",
+  "git_commit_rtl": "472a224a7158400786e0c1899d63b3ee80fb4c22",
+  "git_commit_rtl_lowpower": "c592051849afafa65212e43970e8d015fe91ec96",
   "python": "3.12.3",
   "numpy": "2.4.4",
+  "cocotb": "1.9.2",
+  "matplotlib": "3.10.9",
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "gpu": "NVIDIA GeForce RTX 5070",
   "verilator": "Verilator 5.051 devel rev v5.050-59-gdde8de0a0 (mod)",
   "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-286-g15689210c-dirty)",
+  "eda_versions": [
+    "Yosys 0.64+post (git sha1 UNKNOWN-dirty, g++ 11.4.0-1ubuntu1~22.04.3 -fPIC -O3)",
+    "26Q3-23-gb65c274cad",
+    "3.1.0"
+  ],
+  "orfs_image": "openroad/orfs@sha256:5fb6465e18c42bfaa19f0ba40190f1c75cb6118feffd236b13ed8081ff3f573f",
   "run": "m3_rtl",
   "milestone": "M3"
 }

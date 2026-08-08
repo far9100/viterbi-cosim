@@ -1,14 +1,31 @@
 {
-  "start_timestamp": "2026-08-01T00:03:13+0800",
+  "start_timestamp": "2026-08-08T10:40:50+0800",
   "argv": [
     "scripts/m1_gate.py"
   ],
-  "git_commit": "9c46bf8c59f23cfc9a8a48a03d05f633c2b14f58",
-  "git_dirty": true,
+  "git_commit": "c908d08c8847f7848875c2909a891503396baf40",
+  "git_dirty_src": false,
+  "git_commit_golden": "e3d9a2f5dfb4a3263bd6177c6fb14b0a676d0be0",
+  "git_commit_rtl": "472a224a7158400786e0c1899d63b3ee80fb4c22",
+  "git_commit_rtl_lowpower": "c592051849afafa65212e43970e8d015fe91ec96",
   "python": "3.12.3",
   "numpy": "2.4.4",
+  "cocotb": "1.9.2",
+  "matplotlib": "3.10.9",
+  "torch": "2.11.0+cu128",
+  "cuda": "12.8",
+  "gpu": "NVIDIA GeForce RTX 5070",
   "verilator": "Verilator 5.051 devel rev v5.050-59-gdde8de0a0 (mod)",
   "iverilog": "Icarus Verilog version 14.0 (devel) (s20260301-286-g15689210c-dirty)",
+  "eda_versions": [
+    "Yosys 0.64+post (git sha1 UNKNOWN-dirty, g++ 11.4.0-1ubuntu1~22.04.3 -fPIC -O3)",
+    "26Q3-23-gb65c274cad",
+    "3.1.0",
+    "Unable to find image 'openroad/orfs@sha256:a3e793752297cfea1e26e6013b4f43b629a9f074d0341df03d8521b72bc8ace7' locally",
+    "docker.io/openroad/orfs@sha256:a3e793752297cfea1e26e6013b4f43b629a9f074d0341df03d8521b72bc8ace7: Pulling from openroad/orfs",
+    "29a7a02764e6: Pulling fs layer"
+  ],
+  "orfs_image": "openroad/orfs@sha256:5fb6465e18c42bfaa19f0ba40190f1c75cb6118feffd236b13ed8081ff3f573f",
   "run": "m1_golden",
   "milestone": "M1"
 }
